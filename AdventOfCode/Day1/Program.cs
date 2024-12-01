@@ -14,7 +14,7 @@ foreach (var line in lines)
     right.Add(values[1]);
 }
 
-CalculateDifferences();
+CalculateSimilarity();
 return;
 
 void CalculateDifferences()
@@ -23,4 +23,12 @@ void CalculateDifferences()
 
     Console.WriteLine("Result:");
     Console.WriteLine(differences.Sum());
+}
+
+void CalculateSimilarity()
+{
+    var similarityTotal = left.Sum(l => right.Count(r => l == r) * l);
+
+    Console.WriteLine("Result:");
+    Console.WriteLine(similarityTotal);
 }
