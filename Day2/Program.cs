@@ -1,14 +1,12 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
-using System.Diagnostics;
-
 // List<List<int>> reports = [
-//     [7, 6, 4, 2, 1],
-//     [1, 2, 7, 8, 9],
-//     [9, 7, 6, 2, 1],
-//     [1, 3, 2, 4, 5],
-//     [8, 6, 4, 4, 1],
-//     [1, 3, 6, 7, 9],
+//     // [7, 6, 4, 2, 1],
+//     // [1, 2, 7, 8, 9],
+//     // [9, 7, 6, 2, 1],
+//     // [1, 3, 2, 4, 5],
+//     // [8, 6, 4, 4, 1],
+//     // [1, 5, 6, 7] // broken
 // ];
 
 var reports = LoadReports();
@@ -62,9 +60,21 @@ internal static class ReportChecker
                 _ => new(Status.Unsafe, null)
             };
         });
+    
+    internal static bool IsSafe(this IEnumerable<int> report)
+    {
+        if (report.CheckReport().IsSafe)
+        {
+            return true;
+        }
 
-    internal static bool IsSafe(this IEnumerable<int> report) 
-        => report.CheckReport().Status is Status.SafeAscending or Status.SafeDescending; 
+        return report
+            .PossibleSublistsExcludingOneItem()
+            .Any(subList => subList.CheckReport().IsSafe);
+    }
+
+    private static IEnumerable<IEnumerable<T>> PossibleSublistsExcludingOneItem<T>(this IEnumerable<T> original)
+        => original.Select((_, i) => original.Where((_, index) => index != i));
 }
 
 internal enum Status
@@ -75,4 +85,7 @@ internal enum Status
     SafeDescending,
 }
 
-internal record DirectionAccumulate(Status Status, int? Last);
+internal record DirectionAccumulate(Status Status, int? Last)
+{
+    internal bool IsSafe => Status is Status.SafeAscending or Status.SafeDescending;
+};
