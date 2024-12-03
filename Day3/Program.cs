@@ -28,6 +28,6 @@ partial class Program
     [GeneratedRegex(@"don't\(\).*?(?:do\(\))", RegexOptions.Singleline)]
     private static partial Regex MatchedDontRegex();
 
-    [GeneratedRegex(@"don't\(\).*")]
+    [GeneratedRegex(@"don't\(\).*", RegexOptions.Singleline)]
     private static partial Regex UnmatchedDontRegex();
 }
