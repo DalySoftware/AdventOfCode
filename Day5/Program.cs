@@ -34,9 +34,11 @@ const string testInput = """
 var fileInput = File.ReadAllText("input.txt");
 var input = Read(fileInput);
 
-var validUpdates = input.Updates.Where(u => u.IsValid(input.Rules));
+var invalidUpdates = input.Updates.Where(u => !u.IsValid(input.Rules));
 
-var result = validUpdates.Sum(u => MiddleOf(u.Pages));
+var fixedUpdates = invalidUpdates.Select(u => FixInvalid(u, input.Rules));
+
+var result = fixedUpdates.Sum(u => MiddleOf(u.Pages));
 Console.WriteLine("Total:");
 Console.WriteLine(result);
 
@@ -62,6 +64,19 @@ Input Read(string inputText)
         .ToArray();
 
     return new Input(rules, updates);
+}
+
+Update FixInvalid(Update update, Rule[] rules)
+{
+    var failedRule = rules.FirstOrDefault(r => !r.IsSatisfied(update));
+    if (failedRule == null)
+        // valid update
+        return update;
+
+    var newOrder = update.Pages.Where(p => p != failedRule.Right).Append(failedRule.Right);
+    var newUpdate = new Update(newOrder.ToArray());
+
+    return FixInvalid(newUpdate, rules);
 }
 
 
