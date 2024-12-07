@@ -46,5 +46,6 @@ IEnumerable<long> PossibleValues(List<long> numbers)
     [
         ..otherNumbersValues.Select(n => n + lastNumber),
         ..otherNumbersValues.Select(n => n * lastNumber),
+        ..otherNumbersValues.Select(n => long.Parse(n.ToString() + lastNumber)),
     ];
 }
