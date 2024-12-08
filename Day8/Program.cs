@@ -52,12 +52,8 @@ Antinodes Antinodes(Antennae antennae, int maxX, int maxY)
             .SelectMany(_ => kv.Value, (a, b) => (a, b))
             .Where(pair => pair.a != pair.b);
 
-        var antinodes = pairs
-            .SelectMany(x => x.a.Antinodes(x.b))
-            .ToList();
-
-        return antinodes
-            .Where(a => a.X >= 0 && a.X <= maxX && a.Y >= 0 && a.Y <= maxY)
+        return pairs
+            .SelectMany(x => x.a.Antinodes(x.b, maxX, maxY))
             .ToList();
     });
 }
@@ -67,9 +63,34 @@ readonly record struct Vector2(int X, int Y)
     public static Vector2 operator +(Vector2 a, Vector2 b) => new(a.X + b.X, a.Y + b.Y);
     public static Vector2 operator -(Vector2 a, Vector2 b) => new(a.X - b.X, a.Y - b.Y);
 
-    internal IEnumerable<Vector2> Antinodes(Vector2 other)
+    bool WithinBounds(int maxX, int maxY) =>
+        X >= 0 && X <= maxX && Y >= 0 && Y <= maxY;
+
+    internal IEnumerable<Vector2> Antinodes(Vector2 other, int maxX, int maxY)
     {
+        List<Vector2> antinodes = [this, other];
+
         var direction = this - other;
-        return [this + direction, other - direction];
+        var lastNode = this;
+        while (true)
+        {
+            var newNode = lastNode + direction;
+            if (!newNode.WithinBounds(maxX, maxY)) break;
+
+            antinodes.Add(newNode);
+            lastNode = newNode;
+        }
+
+        lastNode = other;
+        while (true)
+        {
+            var newNode = lastNode - direction;
+            if (!newNode.WithinBounds(maxX, maxY)) break;
+
+            antinodes.Add(newNode);
+            lastNode = newNode;
+        }
+
+        return antinodes;
     }
 };
