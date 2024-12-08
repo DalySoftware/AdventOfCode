@@ -16,14 +16,26 @@ using System.Collections;
 //             """;
 var input = File.ReadAllText("input.txt");
 
-var map = Read(input);
+var initialMap = Read(input);
+var initialGuardPosition = initialMap.Guard.Point;
 
-while (map.MoveGuard())
-{
-}
+_ = initialMap.CausesLoop();
+var possibleExtraObstructions = initialMap.VisitedPoints.Where(p => p != initialGuardPosition);
 
-Console.WriteLine("Visited:");
-Console.WriteLine(map.Visited.Count);
+// Console.WriteLine(possibleExtraObstructions.Count());
+
+var possibleMaps = possibleExtraObstructions
+    .Select(p => new Map(
+        initialMap.Obstacles.Append(new Obstacle { Point = p }),
+        new Guard { Point = initialGuardPosition },
+        initialMap.MaxX,
+        initialMap.MaxY));
+
+Console.WriteLine("Calculating loops");
+var possibleLoops = possibleMaps.AsParallel().Count(m => m.CausesLoop());
+
+Console.WriteLine("Loops found:");
+Console.WriteLine(possibleLoops);
 
 return;
 
@@ -99,15 +111,18 @@ class Obstacle : MapEntity;
 
 record Map(IEnumerable<Obstacle> Obstacles, Guard Guard, int MaxX, int MaxY)
 {
-    internal readonly HashSet<Vector2> Visited = [Guard.Point];
+    readonly HashSet<(Vector2 Point, Vector2 Velocity)>
+        _seenStates = [(Guard.Point, Guard.Velocity)];
 
-    internal bool MoveGuard()
+    internal IEnumerable<Vector2> VisitedPoints => _seenStates.Select(s => s.Point).Distinct();
+
+    bool MoveGuard()
     {
         var newPosition = GetNextPosition();
 
         if (IsOutOfBounds(newPosition)) return false;
 
-        Visited.Add(newPosition);
+        _seenStates.Add((Guard.Point, Guard.Velocity));
         Guard.MoveTo(newPosition);
         return true;
     }
@@ -127,4 +142,20 @@ record Map(IEnumerable<Obstacle> Obstacles, Guard Guard, int MaxX, int MaxY)
         Obstacles.Any(o => o.Point == position);
 
     bool IsOutOfBounds(Vector2 position) => position.X > MaxX || position.Y > MaxY;
-};
+
+    internal bool CausesLoop()
+    {
+        const int limit = 1_000_000;
+        var left = limit;
+        while (left > 0)
+        {
+            if (!MoveGuard()) return false;
+            if (_seenStates.Contains((Guard.Point, Guard.Velocity))) return true;
+            left--;
+            if (left % 1_000_000 == 0) Console.WriteLine(left);
+        }
+
+        Console.WriteLine($"Gave up after {limit} non repeated states");
+        return false;
+    }
+}
