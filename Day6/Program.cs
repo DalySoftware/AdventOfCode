@@ -141,11 +141,11 @@ record Map(IEnumerable<Obstacle> Obstacles, Guard Guard, int MaxX, int MaxY)
     bool IsBlocked(Vector2 position) =>
         Obstacles.Any(o => o.Point == position);
 
-    bool IsOutOfBounds(Vector2 position) => position.X > MaxX || position.Y > MaxY;
+    bool IsOutOfBounds(Vector2 position) => position.X < 0 || position.X > MaxX || position.Y < 0 || position.Y > MaxY;
 
     internal bool CausesLoop()
     {
-        const int limit = 1_000_000;
+        const int limit = 100_000_000;
         var left = limit;
         while (left > 0)
         {
