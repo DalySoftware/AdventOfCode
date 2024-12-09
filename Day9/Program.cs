@@ -13,35 +13,41 @@ Console.WriteLine(compacted.Checksum());
 
 return;
 
-IEnumerable<IBlock> Parse(string inputString) =>
+IEnumerable<Block> Parse(string inputString) =>
     inputString
         .WithIndex()
-        .SelectMany<(char Ch, int Index), IBlock>(x =>
+        .SelectMany<(char Ch, int Index), Block>(x =>
             x.Index % 2 == 0
                 ? Enumerable.Repeat(new FileBlock(x.Index.ToId()), x.Ch.AsInt())
                 : Enumerable.Repeat(new FreeBlock(), x.Ch.AsInt()));
 
-IReadOnlyCollection<IBlock> Compact(IReadOnlyCollection<IBlock> blocks)
+IReadOnlyCollection<Block> Compact(IReadOnlyCollection<Block> blocks)
 {
-    var swaps = 0;
-    while (true)
+    var blocksList = blocks.ToList();
+    var freeSections = blocksList.FindConsecutiveGroups(b => b is FreeBlock).ToList();
+    var fileSections =
+        new Stack<Group>(blocksList.FindConsecutiveGroups(b => b is FileBlock));
+
+    foreach (var fileSection in fileSections)
     {
-        var lastFileIndex = blocks.WithIndex().Last(x => x.Value is FileBlock).Index;
-        var firstFreeIndex = blocks.WithIndex().First(x => x.Value is FreeBlock).Index;
+        // blocksList.Print();
+        var freeSection = freeSections.FirstOrDefault(
+            s => s.Length >= fileSection.Length && s.EndIndex < fileSection.StartIndex);
+        if (freeSection is null) continue;
 
-        if (firstFreeIndex > lastFileIndex) return blocks;
-
-        blocks = blocks.SwapBlocks(lastFileIndex, firstFreeIndex);
-        swaps++;
-        if (swaps % 1000 == 0) Console.WriteLine("Swaps " + swaps);
+        blocksList.SwapSections(freeSection, fileSection);
+        // Recalculate free if we swapped
+        freeSections = blocksList.FindConsecutiveGroups(b => b is FreeBlock).ToList();
     }
+
+    return blocksList;
 }
 
-interface IBlock;
+abstract record Block;
 
-record FreeBlock : IBlock;
+record FreeBlock : Block;
 
-record FileBlock(long Id) : IBlock;
+record FileBlock(long Id) : Block;
 
 
 static class Extensions
@@ -52,19 +58,66 @@ static class Extensions
     internal static IEnumerable<(T Value, int Index)> WithIndex<T>(this IEnumerable<T> enumerable)
         => enumerable.Select((value, index) => (value, index));
 
-    internal static IReadOnlyCollection<IBlock> SwapBlocks(
-        this IReadOnlyCollection<IBlock> blocks,
+    static void SwapBlocks(
+        this IList<Block> blocks,
         int indexA,
-        int indexB)
+        int indexB) =>
+        (blocks[indexA], blocks[indexB]) = (blocks[indexB], blocks[indexA]);
+
+    internal static void SwapSections(this IList<Block> blocks, Group freeSection,
+        Group fileSection)
     {
-        var list = blocks.ToList();
-        (list[indexA], list[indexB]) = (list[indexB], list[indexA]);
-        return list;
+        if (freeSection.Length < fileSection.Length)
+            throw new InvalidOperationException();
+
+        for (var i = 0; i < fileSection.Length; i++)
+        {
+            var indexA = fileSection.StartIndex + i;
+            var indexB = freeSection.StartIndex + i;
+
+            blocks.SwapBlocks(indexA, indexB);
+        }
     }
 
-    internal static long Checksum(this IReadOnlyCollection<IBlock> blocks)
+    internal static long Checksum(this IReadOnlyCollection<Block> blocks)
         => blocks
-            .OfType<FileBlock>()
             .WithIndex()
-            .Sum(x => x.Value.Id * x.Index);
+            .Sum(x => x.Value is FileBlock f ? f.Id * x.Index : 0);
+
+    internal static void Print(this IEnumerable<Block> blocks)
+    {
+        var strings = blocks.Select(b => b is FileBlock f ? f.Id.ToString() : ".");
+        Console.WriteLine(string.Concat(strings));
+    }
+
+    internal static IEnumerable<Group> FindConsecutiveGroups(this IEnumerable<Block> input,
+        Func<Block, bool> matchPredicate)
+        =>
+            input
+                .WithIndex()
+                .Aggregate(
+                    new List<(Group Group, Block Item)>(),
+                    (list, item) =>
+                    {
+                        if (!matchPredicate(item.Value)) return list;
+
+                        var lastGroup = list.LastOrDefault();
+                        if (list.Count == 0 || lastGroup.Group.EndIndex != item.Index - 1 ||
+                            !Equals(lastGroup.Item, item.Value))
+                        {
+                            list.Add((new(item.Index, item.Index), item.Value));
+                            return list;
+                        }
+
+                        // Replace the last item. 
+                        list[^1] = (lastGroup.Group with { EndIndex = item.Index }, item.Value);
+                        return list;
+                    }
+                )
+                .Select(x => x.Group);
 }
+
+record Group(int StartIndex, int EndIndex)
+{
+    internal int Length => EndIndex - StartIndex + 1;
+};
