@@ -47,19 +47,19 @@ static class Extensions
     internal static int Score(this Map map)
     {
         var nines = map.Tiles.Where(t => t.Value == 9);
-        return nines.Sum(n => n.ReachableZeroes(map).Count);
+        return nines.Sum(n => n.Score(map));
     }
 
-    static HashSet<Tile> ReachableZeroes(this Tile tile, Map map)
+    static int Score(this Tile tile, Map map)
     {
         var neighbours = tile.DecreasingNeighbours(map).ToList();
 
         // Console.WriteLine(tile.Value + " at (" + tile.X + "," + tile.Y + ") : " + neighbours.Count);
 
-        if (tile.Value == 0) return [tile];
-        if (neighbours.Count == 0) return [];
+        if (tile.Value == 0) return 1;
+        if (neighbours.Count == 0) return 0;
 
-        return neighbours.SelectMany(n => n.ReachableZeroes(map)).ToHashSet();
+        return neighbours.Sum(t => t.Score(map));
     }
 
     static IEnumerable<Tile> DecreasingNeighbours(this Tile tile, Map map)
