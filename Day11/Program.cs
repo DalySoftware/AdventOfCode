@@ -3,58 +3,50 @@
 var input = "0 89741 316108 7641 756 9 7832357 91";
 
 var stones = Parse(input);
-var finalStones = Blink(stones, 75);
-
-var count = 0L;
-foreach (var _ in finalStones)
-{
-    if (count % 10_000_000 == 0) Console.WriteLine(count);
-    count++;
-}
+var score = Blink(stones, 45);
 
 Console.WriteLine("Stones:");
-Console.WriteLine(count);
+Console.WriteLine(score);
 return;
 
-IEnumerable<string> Blink(IEnumerable<string> stones, int blinks)
+long Blink(ReadOnlySpan<string> stones, int blinks)
 {
-    var result = stones;
+    var currentStones = stones;
     while (blinks > 0)
     {
-        result = TransformStones(result);
+        Console.WriteLine("Blinks " + blinks);
+        currentStones = TransformStones(currentStones);
         blinks--;
     }
 
-    return result;
+    return currentStones.Length;
 }
 
-static IEnumerable<string> TransformStones(IEnumerable<string> stones)
+static ReadOnlySpan<string> TransformStones(ReadOnlySpan<string> stones)
 {
+    var newStones = new List<string>();
     foreach (var stone in stones)
     foreach (var transformedStone in stone.Transform())
-        yield return transformedStone;
+        newStones.Add(transformedStone);
+
+    return new ReadOnlySpan<string>(newStones.ToArray());
 }
 
-static IEnumerable<string> Parse(string input) => input.Split(" ");
+static ReadOnlySpan<string> Parse(string input) => input.Split(" ");
 
 static class Extensions
 {
-    static readonly Dictionary<string, string[]> TransformCache = new();
+    static readonly Dictionary<string, ReadOnlyMemory<string>> TransformCache = new();
 
-    internal static IEnumerable<string> Transform(this string stone)
+    internal static ReadOnlySpan<string> Transform(this string stone)
     {
-        if (TransformCache.TryGetValue(stone, out var cached))
-        {
-            foreach (var str in cached) yield return str;
-
-            yield break;
-        }
+        if (TransformCache.TryGetValue(stone, out var cached)) return cached.Span;
 
         if (stone == "0")
         {
-            TransformCache[stone] = ["1"];
-            yield return "1";
-            yield break;
+            string[] result = ["1"];
+            TransformCache[stone] = result;
+            return result;
         }
 
         if (stone.Length % 2 == 0)
@@ -63,15 +55,15 @@ static class Extensions
             var a = stone[..midPoint];
             var b = stone[midPoint..].TruncateLeadingZeros();
 
-            TransformCache[stone] = [a, b];
-            yield return a;
-            yield return b;
-            yield break;
+            string[] result = [a, b];
+            TransformCache[stone] = result;
+            return result;
         }
 
-        var result = (long.Parse(stone) * 2024).ToString();
-        TransformCache[stone] = [result];
-        yield return result;
+        var transformed = (long.Parse(stone) * 2024).ToString();
+        string[] finalResult = [transformed];
+        TransformCache[stone] = finalResult;
+        return finalResult;
     }
 
     static string TruncateLeadingZeros(this string input)
