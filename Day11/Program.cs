@@ -2,14 +2,13 @@
 
 // var testInput = "125 17";
 
-using System.Collections;
-
 var input = "0 89741 316108 7641 756 9 7832357 91";
 
 var stones = Parse(input);
 // var finalStones = Blink(stones, 75);
 
-var score = stones.Sum(Extensions.Score);
+var score = 0L;
+foreach (var stone in stones) score += stone.Score();
 
 Console.WriteLine("Score:");
 Console.WriteLine(score);
@@ -61,25 +60,34 @@ static class Extensions
         // return Math.Floor(Math.Log10(stone) + 1);
     }
 
-    static readonly Dictionary<long, Stone[]> TransformCache = new();
+    static readonly ILookup<long, long> TransformCache = new List<long>().ToLookup(l => l);
 
-    internal static IEnumerable<Stone> Transform(this Stone stone)
+    internal static Span<Stone> Transform(Stone stone)
     {
         if (TransformCache.TryGetValue(stone.Value, out var cached))
-            foreach (var cachedStone in cached.Select(s => s with { Iteration = stone.Iteration + 1 }))
-                yield return cachedStone;
+            foreach (var cachedValue in cached)
+                yield return new Stone(cachedValue, stone.Iteration + 1);
 
         if (stone.Value == 0)
-            yield return new Stone(1, stone.Iteration + 1);
+        {
+            var newStone = new Stone(1, stone.Iteration + 1);
+
+            yield return ;
+        }
         else if (stone.Value.HasEvenDigits())
-            foreach (var newStone in stone.Value.Split().Select(v => new Stone(v, stone.Iteration + 1)))
-                yield return newStone;
-        else yield return new Stone(stone.Value * 2024, stone.Iteration + 1);
+        {
+            foreach (var value in stone.Value.Split())
+                yield return new Stone(value, stone.Iteration + 1);
+        }
+        else
+        {
+            yield return new Stone(stone.Value * 2024, stone.Iteration + 1);
+        }
     }
 
     static readonly Dictionary<Stone, long> ScoreCache = new();
 
-    internal static long Score(Stone stone)
+    internal static long Score(this Stone stone)
     {
         if (ScoreCache.TryGetValue(stone, out var cachedStoneScore)) return cachedStoneScore;
 
@@ -99,7 +107,9 @@ static class Extensions
         return score;
     }
 
-    const int MaxIterations = 25;
+    const int MaxIterations = 5;
 }
 
-record struct Stone(long Value, int Iteration);
+// record struct Stone(ReadOnlySpan<byte> Value, int Iteration);
+
+ref struct Stone(ReadOnlySpan<byte> Value, int Iteration);
