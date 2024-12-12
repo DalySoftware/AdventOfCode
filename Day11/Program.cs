@@ -3,74 +3,68 @@
 var input = "0 89741 316108 7641 756 9 7832357 91";
 
 var stones = Parse(input);
-var score = Blink(stones, 45);
+var score = Blink(stones, 75);
 
 Console.WriteLine("Stones:");
 Console.WriteLine(score);
 return;
 
-long Blink(ReadOnlySpan<string> stones, int blinks)
-{
-    var currentStones = stones;
-    while (blinks > 0)
-    {
-        Console.WriteLine("Blinks " + blinks);
-        currentStones = TransformStones(currentStones);
-        blinks--;
-    }
+long Blink(long[] stones, int blinks) => stones.CountStones(blinks);
 
-    return currentStones.Length;
-}
-
-static ReadOnlySpan<string> TransformStones(ReadOnlySpan<string> stones)
-{
-    var newStones = new List<string>();
-    foreach (var stone in stones)
-    foreach (var transformedStone in stone.Transform())
-        newStones.Add(transformedStone);
-
-    return new ReadOnlySpan<string>(newStones.ToArray());
-}
-
-static ReadOnlySpan<string> Parse(string input) => input.Split(" ");
+static long[] Parse(string input) => input.Split(" ").Select(long.Parse).ToArray();
 
 static class Extensions
 {
-    static readonly Dictionary<string, ReadOnlyMemory<string>> TransformCache = new();
+    static readonly Dictionary<(long stone, int iteration), long> CountCache = new();
 
-    internal static ReadOnlySpan<string> Transform(this string stone)
+    internal static long CountStones(this long[] stones, int iteration)
+        => stones.Sum(stone => stone.CachedCount(iteration));
+
+    internal static long CachedCount(this long stone, int iteration) =>
+        CountCache.TryGetValue((stone, iteration), out var cached)
+            ? cached
+            : CountCache[(stone, iteration)] = stone.CountStone(iteration);
+
+    static long CountStone(this long stone, int iteration)
+        => iteration == 0 ? 1 : CachedTransform(stone).CountStones(iteration - 1);
+
+
+    static readonly Dictionary<long, long[]> TransformCache = new();
+
+    internal static long[] CachedTransform(this long stone)
+        => TransformCache.TryGetValue(stone, out var cached) ? cached : TransformCache[stone] = Transform(stone);
+
+    internal static long[] Transform(this long stone)
     {
-        if (TransformCache.TryGetValue(stone, out var cached)) return cached.Span;
+        if (stone == 0) return [1];
 
-        if (stone == "0")
+        var digits = stone.Digits();
+        if (digits % 2 == 0)
         {
-            string[] result = ["1"];
-            TransformCache[stone] = result;
-            return result;
+            var halves = stone.Split(digits);
+            return [halves[0], halves[1]];
         }
 
-        if (stone.Length % 2 == 0)
-        {
-            var midPoint = stone.Length / 2;
-            var a = stone[..midPoint];
-            var b = stone[midPoint..].TruncateLeadingZeros();
-
-            string[] result = [a, b];
-            TransformCache[stone] = result;
-            return result;
-        }
-
-        var transformed = (long.Parse(stone) * 2024).ToString();
-        string[] finalResult = [transformed];
-        TransformCache[stone] = finalResult;
-        return finalResult;
+        return [stone * 2024];
     }
 
-    static string TruncateLeadingZeros(this string input)
+    static long Digits(this long stone)
     {
-        // Use TrimStart to remove leading zeroes, then ensure at least one character remains
-        var truncated = input.TrimStart('0');
+        if (stone == 0) return 1;
 
-        return string.IsNullOrEmpty(truncated) ? "0" : truncated;
+        var digits = 0;
+        while (stone != 0)
+        {
+            stone /= 10;
+            digits++;
+        }
+
+        return digits;
+    }
+
+    static long[] Split(this long stone, long digits)
+    {
+        var divisor = (long)Math.Pow(10, digits / 2);
+        return [stone / divisor, stone % divisor];
     }
 }
