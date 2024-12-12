@@ -7,6 +7,15 @@
 //             EEEC
 //             """;
 
+// var input = """
+//             AAAAAA
+//             AAABBA
+//             AAABBA
+//             ABBAAA
+//             ABBAAA
+//             AAAAAA
+//             """;
+
 var input = File.ReadAllText("input.txt");
 
 var map = Parse(input);
@@ -57,7 +66,7 @@ int CalculateCost(Map map)
     var plots = map.Plots.ToHashSet(); // take a copy
     var seen = new HashSet<Plot>();
 
-    var currentFences = 0;
+    var currentFences = new HashSet<Fence>();
     var currentArea = 0;
     var totalCost = 0;
 
@@ -71,7 +80,7 @@ int CalculateCost(Map map)
             var neighbours = map.Neighbours(plot).ToList();
             seen.Add(plot);
 
-            currentFences += map.Neighbours(plot).Count(n => n.Value != plot.Value);
+            foreach (var fence in map.Fences(plot)) currentFences.Add(fence);
             currentArea += 1;
 
             foreach (var neighbour in neighbours.Where(n => n.Value == plot.Value))
@@ -86,10 +95,14 @@ int CalculateCost(Map map)
 
     void StartNewGroup()
     {
-        totalCost += currentFences * currentArea;
-        Console.WriteLine(currentFences + " * " + currentArea);
+        var grouping = new FenceGrouping(currentFences.ToList());
+        var groups = grouping.GroupByAdjacency();
+        var sides = groups.Count;
 
-        currentFences = 0;
+        totalCost += sides * currentArea;
+        Console.WriteLine(sides + " * " + currentArea);
+
+        currentFences.Clear();
         currentArea = 0;
 
         var next = plots.Except(seen).FirstOrDefault(p => p.Value is not null);
@@ -102,6 +115,82 @@ record Map(HashSet<Plot> Plots)
 {
     internal IEnumerable<Plot> Neighbours(Plot plot)
         => Plots.Where(other => other.IsNeighbour(plot));
+
+    internal HashSet<Fence> Fences(Plot plot)
+    {
+        return Neighbours(plot)
+            .Where(other => other.Value != plot.Value)
+            .Select(other => new Fence(plot, other))
+            .ToHashSet();
+    }
+}
+
+record Fence
+{
+    decimal _x;
+    decimal _y;
+
+    char? _left;
+    char? _right;
+    char? _top;
+    char? _bottom;
+
+    internal Fence(Plot a, Plot b)
+    {
+        _x = (a.X + b.X) / 2m;
+        _y = (a.Y + b.Y) / 2m;
+
+        if (XIsHalf && YIsHalf) throw new InvalidOperationException();
+
+        if (XIsHalf)
+        {
+            _left = a.X < b.X ? a.Value : b.Value;
+            _right = a.X < b.X ? b.Value : a.Value;
+        }
+
+        if (YIsHalf)
+        {
+            _top = a.Y < b.Y ? a.Value : b.Value;
+            _bottom = a.Y < b.Y ? b.Value : a.Value;
+        }
+    }
+
+    static bool IsHalf(decimal num) => Math.Abs(num - Math.Floor(num) - 0.5m) == 0m;
+    bool XIsHalf => IsHalf(_x);
+    bool YIsHalf => IsHalf(_y);
+
+    internal bool IsAdjacent(Fence other) =>
+        (YIsHalf && (_top == other._top || _bottom == other._bottom) && _y == other._y && Math.Abs(_x - other._x) <= 1)
+        ||
+        (XIsHalf && (_left == other._left || _right == other._right) && _x == other._x && Math.Abs(_y - other._y) <= 1);
+}
+
+class FenceGrouping(List<Fence> fences)
+{
+    readonly bool[] _visited = new bool[fences.Count];
+
+    public List<List<Fence>> GroupByAdjacency()
+    {
+        var groups = new List<List<Fence>>();
+        for (var i = 0; i < fences.Count; i++)
+            if (!_visited[i])
+            {
+                var group = new List<Fence>();
+                DepthFirstSearch(i, group);
+                groups.Add(group);
+            }
+
+        return groups;
+    }
+
+    void DepthFirstSearch(int index, List<Fence> group)
+    {
+        _visited[index] = true;
+        group.Add(fences[index]);
+        for (var i = 0; i < fences.Count; i++)
+            if (!_visited[i] && fences[index].IsAdjacent(fences[i]))
+                DepthFirstSearch(i, group);
+    }
 }
 
 record Plot(char? Value, int X, int Y)
