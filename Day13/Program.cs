@@ -47,24 +47,25 @@ static class Extensions
 
         if (!xDivisible || !yDivisible) return null;
 
-        var xStrategies = CandidateStrategies(machine.A.XIncrement, machine.B.XIncrement, machine.Prize.X, strategy =>
+        var strategy = GetStrategy(machine.A.XIncrement, machine.B.XIncrement, machine.Prize.X, strategy =>
             strategy.APresses * machine.A.YIncrement + strategy.BPresses * machine.B.YIncrement == machine.Prize.Y);
         // var yStrategies = CandidateStrategies(machine.A.YIncrement, machine.B.YIncrement, machine.Prize.Y);
 
         // Hit both the X and Y coordinate
         // var validStrategies =
         //     xStrategies.Where(x => yStrategies.Any(y => x.APresses == y.APresses && x.BPresses == y.BPresses));
-        return xStrategies.DefaultIfEmpty().MinBy(Cost);
+        // return xStrategies.DefaultIfEmpty().MinBy(Cost);
+        return strategy;
     }
 
-    internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target,
+    internal static Strategy? GetStrategy(long aIncrement, long bIncrement, long target,
         Func<Strategy, bool> extraCondition)
     {
         // Step 1: Find the greatest common divisor (gcd) of aIncrement and bIncrement
         var gcd = GCD(aIncrement, bIncrement);
 
         // Step 2: Check if the target is divisible by gcd
-        if (target % gcd != 0) yield break; // No solution
+        if (target % gcd != 0) return null;
 
         Console.WriteLine("gcd hit");
 
@@ -87,22 +88,21 @@ static class Extensions
         var kMax = (long)Math.Floor((y0 - 1.0) / yStep); // Ensure y > 0
 
         // If bounds are invalid, no solutions exist
-        if (kMin > kMax) yield break;
+        if (kMin > kMax) return null;
 
-        // Step 7: Generate valid solutions within bounds
-        for (var k = kMin; k <= kMax; k++)
-        {
-            if (k % 10_000_000 == 0) Console.WriteLine(k);
-            var x = x0 + k * xStep;
-            var y = y0 - k * yStep;
+        List<Strategy> strategies = [];
 
-            var strategy = new Strategy(x, y);
-            if (extraCondition(strategy))
-            {
-                Console.WriteLine(strategy);
-                yield return strategy;
-            }
-        }
+        var minStrategy = new Strategy(x0 + kMin * xStep, y0 + kMin * yStep);
+        Console.WriteLine(minStrategy);
+        if (extraCondition(minStrategy)) strategies.Add(minStrategy);
+
+        var maxStrategy = new Strategy(x0 + kMax * xStep, y0 + kMax * yStep);
+        Console.WriteLine(maxStrategy);
+        if (extraCondition(maxStrategy)) strategies.Add(maxStrategy);
+
+        if (strategies.Count == 0) return null;
+
+        return strategies.MinBy(Cost);
     }
 
     // Helper function to compute GCD
