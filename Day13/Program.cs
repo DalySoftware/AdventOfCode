@@ -49,78 +49,55 @@ static class Extensions
         return validStrategies.MinBy(Cost);
     }
 
-    static long Gcd(long a, long b, out long x, out long y)
-    {
-        if (b == 0)
-        {
-            x = 1;
-            y = 0;
-            return a;
-        }
-
-        var gcd = Gcd(b, a % b, out x, out y);
-        var temp = y;
-        y = x - a / b * y;
-        x = temp;
-
-        return gcd;
-    }
-
     internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
     {
-        var gcd = Gcd(aIncrement, bIncrement, out var a0, out var b0);
+        var (g, x, y) = ExtendedGcd(aIncrement, bIncrement);
+        if (target % g != 0) yield break; // No solution if target is not a multiple of gcd
 
-        if (target % gcd != 0) yield break; // No solutions if T is not divisible by GCD
+        var scale = target / g;
+        var baseX = x * scale;
+        var baseY = y * scale;
 
-        // Scale the solution to satisfy the equation X * A + Y * B = T
-        a0 *= target / gcd;
-        b0 *= target / gcd;
+        var kStart = (long)Math.Ceiling((double)(-baseX * g) / bIncrement);
+        var kEnd = (long)Math.Floor((double)(baseY * g) / aIncrement);
 
-        Console.WriteLine(a0);
-        Console.WriteLine(b0);
+        Console.WriteLine(kStart + " | " + kEnd);
 
-        // Generate all positive solutions
-        // for (var k = -Math.Abs(bIncrement / gcd); k <= Math.Abs(bIncrement / gcd); k++)
-        // {
-        //     var aPresses = a0 + k * (bIncrement / gcd);
-        //     var bPresses = b0 - k * (aIncrement / gcd);
-        //
-        //     Console.WriteLine(aPresses + " | " + bPresses);
-        //
-        //     if (aPresses > 0 && bPresses > 0)
-        //         yield return new Strategy(aPresses, bPresses);
-        // }
-
-
-        // Generate positive solutions
-        long k = 0;
-        while (true)
+        for (var k = kStart; k <= kEnd; k++)
         {
-            var aPresses = a0 + k * (bIncrement / gcd);
-            var bPresses = b0 - k * (aIncrement / gcd);
+            var xk = baseX + k * (bIncrement / g);
+            var yk = baseY - k * (aIncrement / g);
 
-            if (aPresses > 0 && bPresses > 0) yield return new(aPresses, bPresses);
+            Console.WriteLine(xk + " | " + yk);
 
-            // Stop if incrementing k results in negative values for both A and B
-            if (aPresses <= 0 || bPresses <= 0) break;
+            if (xk > 0 && yk > 0) yield return new Strategy(xk, yk);
+        }
+    }
 
-            k++;
+    static (long gcd, long x, long y) ExtendedGcd(long a, long b)
+    {
+        long x = 1, y = 0;
+        long xLast = 0, yLast = 1;
+        long temp, q, r;
+
+        while (b != 0)
+        {
+            q = a / b;
+            r = a % b;
+
+            temp = x;
+            x = xLast - q * x;
+            xLast = temp;
+
+            temp = y;
+            y = yLast - q * y;
+            yLast = temp;
+
+            a = b;
+            b = r;
         }
 
-        // Check for negative k values
-        k = -1;
-        while (true)
-        {
-            var aPresses = a0 + k * (bIncrement / gcd);
-            var bPresses = b0 - k * (aIncrement / gcd);
-
-            if (aPresses > 0 && bPresses > 0) yield return new(aPresses, bPresses);
-
-            // Stop if decrementing k results in negative values for both A and B
-            if (aPresses <= 0 || bPresses <= 0) break;
-
-            k--;
-        }
+        return (a, xLast, yLast);
     }
 
     // static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
