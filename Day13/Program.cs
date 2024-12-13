@@ -83,27 +83,26 @@ static class Extensions
         var yStep = aIncrement; // Step size for y
 
         // Step 6: Determine bounds for k such that x and y remain positive
-        var kMinX = (long)Math.Ceiling(-1.0 * x0 / xStep); // Ensure x > 0
-        var kMaxY = (long)Math.Floor(1.0 * y0 / yStep); // Ensure y > 0
+        var kMinX = (long)Math.Ceiling((1.0 - x0) / xStep); // Ensure APresses > 0
+        var kMaxY = (long)Math.Floor((y0 - 1.0) / yStep); // Ensure BPresses > 0
 
-        Console.WriteLine(kMinX);
-        Console.WriteLine(kMaxY);
+        Console.WriteLine($"kMinX: {kMinX}, kMaxY: {kMaxY}");
 
         var kMin = Math.Max(kMinX, 0); // Avoid negative kMin
         var kMax = kMaxY;
 
-        Console.WriteLine(kMin);
-        Console.WriteLine(kMax);
+        Console.WriteLine($"kMin: {kMin}, kMax: {kMax}");
 
         // If bounds are invalid, no solutions exist
         if (kMin > kMax) yield break;
-
 
         for (var k = kMin; k <= kMax; k++)
         {
             if (k % 100_000_000 == 0) Console.WriteLine(k + "      Max: " + kMax + "    To Go: " + (kMax - k));
             var x = x0 + k * xStep;
             var y = y0 - k * yStep;
+
+            if (x <= 0 || y <= 0) continue; // Ensure positivity of both values
 
             var strategy = new Strategy(x, y);
             if (extraCondition(strategy))

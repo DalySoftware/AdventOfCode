@@ -1,8 +1,10 @@
-﻿namespace Day13;
+﻿using System.Runtime.CompilerServices;
+
+namespace Day13;
 
 class Tests
 {
-    class TestFailException() : Exception("A test failed");
+    class TestFailException([CallerMemberName] string caller = "") : Exception("A test failed: " + caller);
 
     internal static void Run()
     {
