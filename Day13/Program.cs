@@ -5,27 +5,27 @@ using Day13;
 
 Tests.Run();
 
-var input = """
+// var input = """
+//
+//
+//             Button A: X+94, Y+34
+//             Button B: X+22, Y+67
+//             Prize: X=8400, Y=5400
+//
+//             Button A: X+26, Y+66
+//             Button B: X+67, Y+21
+//             Prize: X=12748, Y=12176
+//
+//             Button A: X+17, Y+86
+//             Button B: X+84, Y+37
+//             Prize: X=7870, Y=6450
+//
+//             Button A: X+69, Y+23
+//             Button B: X+27, Y+71
+//             Prize: X=18641, Y=10279
+//             """;
 
-
-            Button A: X+94, Y+34
-            Button B: X+22, Y+67
-            Prize: X=8400, Y=5400
-
-            Button A: X+26, Y+66
-            Button B: X+67, Y+21
-            Prize: X=12748, Y=12176
-
-            Button A: X+17, Y+86
-            Button B: X+84, Y+37
-            Prize: X=7870, Y=6450
-
-            Button A: X+69, Y+23
-            Button B: X+27, Y+71
-            Prize: X=18641, Y=10279
-            """;
-
-// var input = File.ReadAllText("input.txt");
+var input = File.ReadAllText("input.txt");
 
 // var xStrategies = Extensions.CandidateStrategies(26, 67, 10000000012748);
 // foreach (var xStrategy in xStrategies) Console.WriteLine(xStrategy);
@@ -43,112 +43,92 @@ static class Extensions
 {
     internal static long Cost(Machine machine) => machine.OptimalStrategy()?.Cost() ?? 0;
 
-    static Strategy? OptimalStrategy(this Machine machine)
+    static Strategy? OptimalStrategy(this Machine machine) =>
+        // var xGcd = GCD(machine.A.XIncrement, machine.B.XIncrement);
+        // var xDivisible = machine.Prize.X % xGcd == 0;
+        // var yGcd = GCD(machine.A.YIncrement, machine.B.YIncrement);
+        // var yDivisible = machine.Prize.Y % yGcd == 0;
+        //
+        // if (!xDivisible || !yDivisible) return null;
+        // var strategies = CandidateStrategies(machine.A.XIncrement, machine.B.YIncrement, machine.Prize.X, strategy =>
+        //     strategy.APresses * machine.A.YIncrement + strategy.BPresses * machine.B.YIncrement == machine.Prize.Y);
+        // return strategies.DefaultIfEmpty().MinBy(Cost);
+        SolveDiophantine(machine);
+
+    // Extended Euclidean Algorithm to find gcd and the coefficients
+    static (long, long, long) ExtendedGCD(long a, long b)
     {
-        var xGcd = GCD(machine.A.XIncrement, machine.B.XIncrement);
-        var xDivisible = machine.Prize.X % xGcd == 0;
-        var yGcd = GCD(machine.A.YIncrement, machine.B.YIncrement);
-        var yDivisible = machine.Prize.Y % yGcd == 0;
+        if (b == 0) return (a, 1, 0);
 
-        if (!xDivisible || !yDivisible) return null;
-
-        var strategies = CandidateStrategies(machine.A.XIncrement, machine.B.YIncrement, machine.Prize.X, strategy =>
-            strategy.APresses * machine.A.YIncrement + strategy.BPresses * machine.B.YIncrement == machine.Prize.Y);
-        return strategies.DefaultIfEmpty().MinBy(Cost);
+        var (gcd, x1, y1) = ExtendedGCD(b, a % b);
+        return (gcd, y1, x1 - a / b * y1);
     }
 
-    internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target,
-        Func<Strategy, bool> extraCondition)
+    // Method to find the particular solution for the Diophantine equations
+    public static Strategy? SolveDiophantine(Machine machine)
     {
-        // Step 1: Find the greatest common divisor (gcd) of aIncrement and bIncrement
-        var gcd = GCD(aIncrement, bIncrement);
+        // Step 1: Find the gcd of the coefficients
+        long gcd1, x1, y1;
+        (gcd1, x1, y1) = ExtendedGCD(machine.A.XIncrement, machine.B.XIncrement);
 
-        // Step 2: Check if the target is divisible by gcd
-        if (target % gcd != 0) yield break;
-
-        Console.WriteLine("gcd hit");
-
-        // Step 3: Scale coefficients and target by gcd
-        var scaleFactor = target / gcd;
-        aIncrement /= gcd;
-        bIncrement /= gcd;
-
-        // Step 4: Use the extended Euclidean algorithm to find a particular solution
-        var (x0, y0) = ExtendedGCD(aIncrement, bIncrement);
-        x0 *= scaleFactor;
-        y0 *= scaleFactor;
-
-        // Step 5: Define step sizes for the general solution
-        var xStep = bIncrement; // Step size for x
-        var yStep = aIncrement; // Step size for y
-
-        // Step 6: Determine bounds for k such that x and y remain positive
-
-
-        Console.WriteLine($"kMin: {kMin}, kMax: {kMax}");
-
-        // If bounds are invalid, no solutions exist
-        if (kMin > kMax) yield break;
-
-        // Generate solutions within bounds
-        for (var k = kMin; k <= kMax; k++)
+        // Check if the gcd divides X
+        if (machine.Prize.X % gcd1 != 0)
         {
-            var x = x0 + k * xStep;
-            var y = y0 - k * yStep;
+            Console.WriteLine("No solution exists for X.");
+            return null;
+        }
 
-            // Ensure positivity of both values
-            if (x <= 0 || y <= 0) continue;
+        var scale = machine.Prize.X / gcd1;
+        x1 *= scale;
+        y1 *= scale;
 
-            var strategy = new Strategy(x, y);
-            if (extraCondition(strategy))
+        var (gcd2, _, _) = ExtendedGCD(machine.A.YIncrement, machine.B.YIncrement);
+
+        // Check if the gcd divides Y
+        if (machine.Prize.Y % gcd2 != 0)
+        {
+            Console.WriteLine("No solution exists for Y.");
+            return null;
+        }
+
+        // Now x1 and y1 provide one solution for the first equation
+        // and x2 and y2 provide a solution for the second equation
+
+        // Combine the two results into one system using the method for solving linear Diophantine systems
+        // We need to find integers p and q such that we satisfy both equations.
+
+        // Now that we have the general solution, minimize the cost function
+        var minCost = long.MaxValue;
+        long optimalAPresses = -1;
+        long optimalBPresses = -1;
+
+        // We loop over a reasonable range to adjust the general solution
+        // Since this is still a large scale problem, we must minimize directly.
+        for (long p = -100000; p <= 100000; p++) // Adjust the loop range as needed
+        {
+            var aPresses = x1 + p * machine.B.XIncrement;
+            var bPresses = y1 - p * machine.A.XIncrement;
+
+            if (aPresses < 0 || bPresses < 0 || aPresses + bPresses <= 0) continue;
+
+            var cost = 3 * aPresses + bPresses;
+            if (cost < minCost)
             {
-                Console.WriteLine(strategy);
-                yield return strategy;
+                minCost = cost;
+                optimalAPresses = aPresses;
+                optimalBPresses = bPresses;
             }
         }
-    }
 
-    internal static (long kMin, long kMax) GetBoundsOfK(long xStep, long yStep)
-    {
-        
-        var kMinX = (long)Math.Ceiling(-1d * x0 / xStep); // Ensure APresses > 0
-        var kMaxY = (long)Math.Floor(1d * y0 / yStep); // Ensure BPresses > 0
-
-        Console.WriteLine($"kMinX: {kMinX}, kMaxY: {kMaxY}");
-
-        var kMin = Math.Max(kMinX, 0); // Avoid negative kMin
-        var kMax = kMaxY;
-        
-    }
-
-    static long GCD(long a, long b)
-    {
-        while (b != 0) (a, b) = (b, a % b);
-        return a;
-    }
-
-
-    // Extended Euclidean algorithm to find x0, y0 such that a * x0 + b * y0 = gcd(a, b)
-    static (long x, long y) ExtendedGCD(long a, long b)
-    {
-        long x0 = 1, y0 = 0, x1 = 0, y1 = 1;
-        while (b != 0)
+        if (optimalAPresses != -1 && optimalBPresses != -1)
         {
-            var q = a / b;
-            var r = a % b;
-
-            var tempX = x0 - q * x1;
-            var tempY = y0 - q * y1;
-
-            a = b;
-            b = r;
-            x0 = x1;
-            y0 = y1;
-            x1 = tempX;
-            y1 = tempY;
+            var strategy = new Strategy(optimalAPresses, optimalBPresses);
+            Console.WriteLine("Found optimal: " + strategy);
+            return strategy;
         }
 
-        return (x0, y0);
+        Console.WriteLine("No valid solution found.");
+        return null;
     }
 
     static long Cost(this Strategy strategy) => Cost(strategy.APresses, strategy.BPresses);
@@ -160,17 +140,12 @@ static class Extensions
         return input.Split(["\n", "\r\n"], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select((value, index) => new { Index = index, Value = value })
             .GroupBy(x => x.Index / 3)
-            .Where(_ => false)
             .Select(x =>
             {
                 var lines = x.ToArray();
                 return new Machine(lines[0].Value.ParseButton(), lines[1].Value.ParseButton(),
                     lines[2].Value.ParsePrize());
             })
-            //Button A: X+5, Y+24
-            // Button B: X+10, Y+6
-            // Prize: X=25, Y=36
-            .Prepend(new Machine(new Button(5, 24), new Button(10, 6), new Prize(25, 36)))
             .ToArray();
     }
 
@@ -183,8 +158,8 @@ static class Extensions
     static Prize ParsePrize(this string line)
     {
         var groups = Regexes.Prize().Match(line).Groups;
-        var x = long.Parse(groups[1].Value) + 10000000000000;
-        var y = long.Parse(groups[2].Value) + 10000000000000;
+        var x = long.Parse(groups[1].Value); //+ 10000000000000;
+        var y = long.Parse(groups[2].Value); //+ 10000000000000;
         var prize = new Prize(x, y);
         Console.WriteLine(prize);
         return prize;
