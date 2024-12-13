@@ -22,11 +22,14 @@ var input = """
 
 // var input = File.ReadAllText("input.txt");
 
-var machines = input.Parse();
-var cost = machines.Sum(Extensions.Cost);
+var xStrategies = Extensions.CandidateStrategies(26, 67, 10000000012748);
+foreach (var xStrategy in xStrategies) Console.WriteLine(xStrategy);
 
-Console.WriteLine("Cost:");
-Console.WriteLine(cost);
+// var machines = input.Parse();
+// var cost = machines.Sum(Extensions.Cost);
+//
+// Console.WriteLine("Cost:");
+// Console.WriteLine(cost);
 
 return;
 
@@ -63,7 +66,7 @@ static class Extensions
         return gcd;
     }
 
-    static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
+    internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
     {
         var gcd = Gcd(aIncrement, bIncrement, out var a0, out var b0);
 
@@ -77,19 +80,46 @@ static class Extensions
         Console.WriteLine(b0);
 
         // Generate all positive solutions
-        var k = 0;
+        // for (var k = -Math.Abs(bIncrement / gcd); k <= Math.Abs(bIncrement / gcd); k++)
+        // {
+        //     var aPresses = a0 + k * (bIncrement / gcd);
+        //     var bPresses = b0 - k * (aIncrement / gcd);
+        //
+        //     Console.WriteLine(aPresses + " | " + bPresses);
+        //
+        //     if (aPresses > 0 && bPresses > 0)
+        //         yield return new Strategy(aPresses, bPresses);
+        // }
+
+
+        // Generate positive solutions
+        long k = 0;
         while (true)
         {
             var aPresses = a0 + k * (bIncrement / gcd);
             var bPresses = b0 - k * (aIncrement / gcd);
 
-            Console.WriteLine(aPresses + " | " + bPresses);
+            if (aPresses > 0 && bPresses > 0) yield return new(aPresses, bPresses);
 
-            if (aPresses > 0 && bPresses > 0)
-                yield return new Strategy(aPresses, bPresses);
-            else if (aPresses <= 0 || bPresses <= 0) break;
+            // Stop if incrementing k results in negative values for both A and B
+            if (aPresses <= 0 || bPresses <= 0) break;
 
             k++;
+        }
+
+        // Check for negative k values
+        k = -1;
+        while (true)
+        {
+            var aPresses = a0 + k * (bIncrement / gcd);
+            var bPresses = b0 - k * (aIncrement / gcd);
+
+            if (aPresses > 0 && bPresses > 0) yield return new(aPresses, bPresses);
+
+            // Stop if decrementing k results in negative values for both A and B
+            if (aPresses <= 0 || bPresses <= 0) break;
+
+            k--;
         }
     }
 
