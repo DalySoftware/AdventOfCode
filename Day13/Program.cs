@@ -1,26 +1,31 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using System.Text.RegularExpressions;
+using Day13;
 
-// var input = """
-//             Button A: X+94, Y+34
-//             Button B: X+22, Y+67
-//             Prize: X=8400, Y=5400
-//
-//             Button A: X+26, Y+66
-//             Button B: X+67, Y+21
-//             Prize: X=12748, Y=12176
-//
-//             Button A: X+17, Y+86
-//             Button B: X+84, Y+37
-//             Prize: X=7870, Y=6450
-//
-//             Button A: X+69, Y+23
-//             Button B: X+27, Y+71
-//             Prize: X=18641, Y=10279
-//             """;
+Tests.Run();
 
-var input = File.ReadAllText("input.txt");
+var input = """
+
+
+            Button A: X+94, Y+34
+            Button B: X+22, Y+67
+            Prize: X=8400, Y=5400
+
+            Button A: X+26, Y+66
+            Button B: X+67, Y+21
+            Prize: X=12748, Y=12176
+
+            Button A: X+17, Y+86
+            Button B: X+84, Y+37
+            Prize: X=7870, Y=6450
+
+            Button A: X+69, Y+23
+            Button B: X+27, Y+71
+            Prize: X=18641, Y=10279
+            """;
+
+// var input = File.ReadAllText("input.txt");
 
 // var xStrategies = Extensions.CandidateStrategies(26, 67, 10000000012748);
 // foreach (var xStrategy in xStrategies) Console.WriteLine(xStrategy);
@@ -47,25 +52,19 @@ static class Extensions
 
         if (!xDivisible || !yDivisible) return null;
 
-        var strategy = GetStrategy(machine.A.XIncrement, machine.B.XIncrement, machine.Prize.X, strategy =>
+        var strategies = CandidateStrategies(machine.A.XIncrement, machine.B.YIncrement, machine.Prize.X, strategy =>
             strategy.APresses * machine.A.YIncrement + strategy.BPresses * machine.B.YIncrement == machine.Prize.Y);
-        // var yStrategies = CandidateStrategies(machine.A.YIncrement, machine.B.YIncrement, machine.Prize.Y);
-
-        // Hit both the X and Y coordinate
-        // var validStrategies =
-        //     xStrategies.Where(x => yStrategies.Any(y => x.APresses == y.APresses && x.BPresses == y.BPresses));
-        // return xStrategies.DefaultIfEmpty().MinBy(Cost);
-        return strategy;
+        return strategies.DefaultIfEmpty().MinBy(Cost);
     }
 
-    internal static Strategy? GetStrategy(long aIncrement, long bIncrement, long target,
+    internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target,
         Func<Strategy, bool> extraCondition)
     {
         // Step 1: Find the greatest common divisor (gcd) of aIncrement and bIncrement
         var gcd = GCD(aIncrement, bIncrement);
 
         // Step 2: Check if the target is divisible by gcd
-        if (target % gcd != 0) return null;
+        if (target % gcd != 0) yield break;
 
         Console.WriteLine("gcd hit");
 
@@ -83,27 +82,38 @@ static class Extensions
         var xStep = bIncrement; // Step size for x
         var yStep = aIncrement; // Step size for y
 
-        // Step 6: Determine bounds for k such that x and y remain non-negative
-        var kMin = (long)Math.Ceiling((1.0 - x0) / xStep); // Ensure x > 0
-        var kMax = (long)Math.Floor((y0 - 1.0) / yStep); // Ensure y > 0
+        // Step 6: Determine bounds for k such that x and y remain positive
+        var kMinX = (long)Math.Ceiling(-1.0 * x0 / xStep); // Ensure x > 0
+        var kMaxY = (long)Math.Floor(1.0 * y0 / yStep); // Ensure y > 0
+
+        Console.WriteLine(kMinX);
+        Console.WriteLine(kMaxY);
+
+        var kMin = Math.Max(kMinX, 0); // Avoid negative kMin
+        var kMax = kMaxY;
+
+        Console.WriteLine(kMin);
+        Console.WriteLine(kMax);
 
         // If bounds are invalid, no solutions exist
-        if (kMin > kMax) return null;
+        if (kMin > kMax) yield break;
 
-        List<Strategy> strategies = [];
 
-        var minStrategy = new Strategy(x0 + kMin * xStep, y0 + kMin * yStep);
-        Console.WriteLine(minStrategy);
-        if (extraCondition(minStrategy)) strategies.Add(minStrategy);
+        for (var k = kMin; k <= kMax; k++)
+        {
+            if (k % 100_000_000 == 0) Console.WriteLine(k + "      Max: " + kMax + "    To Go: " + (kMax - k));
+            var x = x0 + k * xStep;
+            var y = y0 - k * yStep;
 
-        var maxStrategy = new Strategy(x0 + kMax * xStep, y0 + kMax * yStep);
-        Console.WriteLine(maxStrategy);
-        if (extraCondition(maxStrategy)) strategies.Add(maxStrategy);
-
-        if (strategies.Count == 0) return null;
-
-        return strategies.MinBy(Cost);
+            var strategy = new Strategy(x, y);
+            if (extraCondition(strategy))
+            {
+                Console.WriteLine(strategy);
+                yield return strategy;
+            }
+        }
     }
+
 
     // Helper function to compute GCD
     static readonly Dictionary<(long, long), long> GcdCache = new();
@@ -159,12 +169,18 @@ static class Extensions
         return input.Split(["\n", "\r\n"], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select((value, index) => new { Index = index, Value = value })
             .GroupBy(x => x.Index / 3)
+            .Where(_ => false)
             .Select(x =>
             {
                 var lines = x.ToArray();
                 return new Machine(lines[0].Value.ParseButton(), lines[1].Value.ParseButton(),
                     lines[2].Value.ParsePrize());
-            }).ToArray();
+            })
+            //Button A: X+5, Y+24
+            // Button B: X+10, Y+6
+            // Prize: X=25, Y=36
+            .Prepend(new Machine(new Button(5, 24), new Button(10, 6), new Prize(25, 36)))
+            .ToArray();
     }
 
     static Button ParseButton(this string line)
@@ -194,10 +210,10 @@ partial class Regexes
 }
 
 
-record Machine(Button A, Button B, Prize Prize);
+record struct Machine(Button A, Button B, Prize Prize);
 
-record Button(long XIncrement, long YIncrement);
+record struct Button(long XIncrement, long YIncrement);
 
-record Prize(long X, long Y);
+record struct Prize(long X, long Y);
 
 record struct Strategy(long APresses, long BPresses);
