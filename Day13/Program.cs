@@ -83,26 +83,21 @@ static class Extensions
         var yStep = aIncrement; // Step size for y
 
         // Step 6: Determine bounds for k such that x and y remain positive
-        var kMinX = (long)Math.Ceiling((1.0 - x0) / xStep); // Ensure APresses > 0
-        var kMaxY = (long)Math.Floor((y0 - 1.0) / yStep); // Ensure BPresses > 0
 
-        Console.WriteLine($"kMinX: {kMinX}, kMaxY: {kMaxY}");
-
-        var kMin = Math.Max(kMinX, 0); // Avoid negative kMin
-        var kMax = kMaxY;
 
         Console.WriteLine($"kMin: {kMin}, kMax: {kMax}");
 
         // If bounds are invalid, no solutions exist
         if (kMin > kMax) yield break;
 
+        // Generate solutions within bounds
         for (var k = kMin; k <= kMax; k++)
         {
-            if (k % 100_000_000 == 0) Console.WriteLine(k + "      Max: " + kMax + "    To Go: " + (kMax - k));
             var x = x0 + k * xStep;
             var y = y0 - k * yStep;
 
-            if (x <= 0 || y <= 0) continue; // Ensure positivity of both values
+            // Ensure positivity of both values
+            if (x <= 0 || y <= 0) continue;
 
             var strategy = new Strategy(x, y);
             if (extraCondition(strategy))
@@ -113,32 +108,29 @@ static class Extensions
         }
     }
 
+    internal static (long kMin, long kMax) GetBoundsOfK(long xStep, long yStep)
+    {
+        
+        var kMinX = (long)Math.Ceiling(-1d * x0 / xStep); // Ensure APresses > 0
+        var kMaxY = (long)Math.Floor(1d * y0 / yStep); // Ensure BPresses > 0
 
-    // Helper function to compute GCD
-    static readonly Dictionary<(long, long), long> GcdCache = new();
+        Console.WriteLine($"kMinX: {kMinX}, kMaxY: {kMaxY}");
+
+        var kMin = Math.Max(kMinX, 0); // Avoid negative kMin
+        var kMax = kMaxY;
+        
+    }
 
     static long GCD(long a, long b)
     {
-        var initial = (a, b);
-        if (GcdCache.TryGetValue(initial, out var cached)) return cached;
-        while (b != 0)
-        {
-            var temp = b;
-            b = a % b;
-            a = temp;
-        }
-
-        return GcdCache[initial] = a;
+        while (b != 0) (a, b) = (b, a % b);
+        return a;
     }
 
-    static readonly Dictionary<(long, long), (long, long)> ExtendedCache = new();
 
     // Extended Euclidean algorithm to find x0, y0 such that a * x0 + b * y0 = gcd(a, b)
     static (long x, long y) ExtendedGCD(long a, long b)
     {
-        var initial = (a, b);
-        if (ExtendedCache.TryGetValue(initial, out var cached)) return cached;
-
         long x0 = 1, y0 = 0, x1 = 0, y1 = 1;
         while (b != 0)
         {
@@ -156,7 +148,7 @@ static class Extensions
             y1 = tempY;
         }
 
-        return ExtendedCache[initial] = (x0, y0);
+        return (x0, y0);
     }
 
     static long Cost(this Strategy strategy) => Cost(strategy.APresses, strategy.BPresses);
