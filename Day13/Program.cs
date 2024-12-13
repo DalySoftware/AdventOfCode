@@ -2,34 +2,34 @@
 
 using System.Text.RegularExpressions;
 
-var input = """
-            Button A: X+94, Y+34
-            Button B: X+22, Y+67
-            Prize: X=8400, Y=5400
-
-            Button A: X+26, Y+66
-            Button B: X+67, Y+21
-            Prize: X=12748, Y=12176
-
-            Button A: X+17, Y+86
-            Button B: X+84, Y+37
-            Prize: X=7870, Y=6450
-
-            Button A: X+69, Y+23
-            Button B: X+27, Y+71
-            Prize: X=18641, Y=10279
-            """;
-
-// var input = File.ReadAllText("input.txt");
-
-var xStrategies = Extensions.CandidateStrategies(26, 67, 10000000012748);
-foreach (var xStrategy in xStrategies) Console.WriteLine(xStrategy);
-
-// var machines = input.Parse();
-// var cost = machines.Sum(Extensions.Cost);
+// var input = """
+//             Button A: X+94, Y+34
+//             Button B: X+22, Y+67
+//             Prize: X=8400, Y=5400
 //
-// Console.WriteLine("Cost:");
-// Console.WriteLine(cost);
+//             Button A: X+26, Y+66
+//             Button B: X+67, Y+21
+//             Prize: X=12748, Y=12176
+//
+//             Button A: X+17, Y+86
+//             Button B: X+84, Y+37
+//             Prize: X=7870, Y=6450
+//
+//             Button A: X+69, Y+23
+//             Button B: X+27, Y+71
+//             Prize: X=18641, Y=10279
+//             """;
+
+var input = File.ReadAllText("input.txt");
+
+// var xStrategies = Extensions.CandidateStrategies(26, 67, 10000000012748);
+// foreach (var xStrategy in xStrategies) Console.WriteLine(xStrategy);
+
+var machines = input.Parse();
+var cost = machines.Sum(Extensions.Cost);
+
+Console.WriteLine("Cost:");
+Console.WriteLine(cost);
 
 return;
 
@@ -40,90 +40,114 @@ static class Extensions
 
     static Strategy? OptimalStrategy(this Machine machine)
     {
-        var xStrategies = CandidateStrategies(machine.A.XIncrement, machine.B.XIncrement, machine.Prize.X);
-        var yStrategies = CandidateStrategies(machine.A.YIncrement, machine.B.YIncrement, machine.Prize.Y);
+        var xGcd = GCD(machine.A.XIncrement, machine.B.XIncrement);
+        var xDivisible = machine.Prize.X % xGcd == 0;
+        var yGcd = GCD(machine.A.YIncrement, machine.B.YIncrement);
+        var yDivisible = machine.Prize.Y % yGcd == 0;
+
+        if (!xDivisible || !yDivisible) return null;
+
+        var xStrategies = CandidateStrategies(machine.A.XIncrement, machine.B.XIncrement, machine.Prize.X, strategy =>
+            strategy.APresses * machine.A.YIncrement + strategy.BPresses * machine.B.YIncrement == machine.Prize.Y);
+        // var yStrategies = CandidateStrategies(machine.A.YIncrement, machine.B.YIncrement, machine.Prize.Y);
 
         // Hit both the X and Y coordinate
-        var validStrategies =
-            xStrategies.Where(x => yStrategies.Any(y => x.APresses == y.APresses && x.BPresses == y.BPresses));
-        return validStrategies.MinBy(Cost);
+        // var validStrategies =
+        //     xStrategies.Where(x => yStrategies.Any(y => x.APresses == y.APresses && x.BPresses == y.BPresses));
+        return xStrategies.DefaultIfEmpty().MinBy(Cost);
     }
 
-    internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
+    internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target,
+        Func<Strategy, bool> extraCondition)
     {
-        var (g, x, y) = ExtendedGcd(aIncrement, bIncrement);
-        if (target % g != 0) yield break; // No solution if target is not a multiple of gcd
+        // Step 1: Find the greatest common divisor (gcd) of aIncrement and bIncrement using the Euclidean algorithm
+        var gcd = GCD(aIncrement, bIncrement);
 
-        var scale = target / g;
-        var baseX = x * scale;
-        var baseY = y * scale;
+        // Step 2: If the gcd does not divide the target, there is no solution
+        if (target % gcd != 0) yield break; // No solution
 
-        var kStart = (long)Math.Ceiling((double)(-baseX * g) / bIncrement);
-        var kEnd = (long)Math.Floor((double)(baseY * g) / aIncrement);
+        Console.WriteLine("gcd hit");
 
-        Console.WriteLine(kStart + " | " + kEnd);
+        // Step 3: Use the extended Euclidean algorithm to find the particular solution
+        var (a0, b0) = ExtendedGCD(aIncrement, bIncrement);
 
-        for (var k = kStart; k <= kEnd; k++)
+        // Step 4: Scale the particular solution to match the target
+        a0 *= target / gcd;
+        b0 *= target / gcd;
+
+        // Step 5: Now find the general solution
+        var stepA = bIncrement / gcd;
+        var stepB = aIncrement / gcd;
+
+        // Step 6: Adjust k to find all positive solutions
+        // We need k such that both a0 + k * stepA > 0 and b0 - k * stepB > 0
+        var kMin = (1 - a0 + stepA - 1) / stepA; // ceil(1 - x0 / stepA)
+        var kMax = (b0 - 1) / stepB; // floor(y0 / stepB)
+
+        Console.WriteLine("kMin: " + kMin);
+        Console.WriteLine("kMax: " + kMax);
+
+        // Generate all valid solutions where both a0 + k * stepA > 0 and b0 - k * stepB > 0
+        for (var k = kMin; k <= kMax && a0 + k * stepA > 0 && b0 - k * stepB > 0; k++)
         {
-            var xk = baseX + k * (bIncrement / g);
-            var yk = baseY - k * (aIncrement / g);
+            if (k % 100_000 == 0) Console.WriteLine(k);
+            var x = a0 + k * stepA;
+            var y = b0 - k * stepB;
 
-            Console.WriteLine(xk + " | " + yk);
-
-            if (xk > 0 && yk > 0) yield return new Strategy(xk, yk);
+            var strategy = new Strategy(x, y);
+            if (extraCondition(strategy))
+            {
+                Console.WriteLine(strategy);
+                yield return strategy;
+            }
         }
     }
 
-    static (long gcd, long x, long y) ExtendedGcd(long a, long b)
-    {
-        long x = 1, y = 0;
-        long xLast = 0, yLast = 1;
-        long temp, q, r;
 
+    // Helper function to compute GCD
+    static readonly Dictionary<(long, long), long> GcdCache = new();
+
+    static long GCD(long a, long b)
+    {
+        var initial = (a, b);
+        if (GcdCache.TryGetValue(initial, out var cached)) return cached;
         while (b != 0)
         {
-            q = a / b;
-            r = a % b;
+            var temp = b;
+            b = a % b;
+            a = temp;
+        }
 
-            temp = x;
-            x = xLast - q * x;
-            xLast = temp;
+        return GcdCache[initial] = a;
+    }
 
-            temp = y;
-            y = yLast - q * y;
-            yLast = temp;
+    static readonly Dictionary<(long, long), (long, long)> ExtendedCache = new();
+
+    // Extended Euclidean algorithm to find x0, y0 such that a * x0 + b * y0 = gcd(a, b)
+    static (long x, long y) ExtendedGCD(long a, long b)
+    {
+        var initial = (a, b);
+        if (ExtendedCache.TryGetValue(initial, out var cached)) return cached;
+
+        long x0 = 1, y0 = 0, x1 = 0, y1 = 1;
+        while (b != 0)
+        {
+            var q = a / b;
+            var r = a % b;
+
+            var tempX = x0 - q * x1;
+            var tempY = y0 - q * y1;
 
             a = b;
             b = r;
+            x0 = x1;
+            y0 = y1;
+            x1 = tempX;
+            y1 = tempY;
         }
 
-        return (a, xLast, yLast);
+        return ExtendedCache[initial] = (x0, y0);
     }
-
-    // static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
-    // {
-    //     var gcd = GreatestCommonDivisor(aIncrement, bIncrement);
-    //
-    //     // Check if T is divisible by the GCD of X and Y
-    //     if (target % gcd != 0) yield break; // No solutions
-    //
-    //     // Reduce the equation by GCD
-    //     aIncrement /= gcd;
-    //     bIncrement /= gcd;
-    //     target /= gcd;
-    //
-    //     // Iterate to find all valid combinations
-    //     for (var aPresses = 0L; aPresses * aIncrement <= target && aPresses >= 0; aPresses++)
-    //     {
-    //         if (aPresses % 1_000_000 == 0) Console.WriteLine(aPresses);
-    //         var remainder = target - aIncrement * aPresses;
-    //         if (remainder % bIncrement != 0) continue;
-    //
-    //         var bPresses = remainder / bIncrement;
-    //         yield return new Strategy(aPresses, bPresses);
-    //     }
-    // }
-
 
     static long Cost(this Strategy strategy) => Cost(strategy.APresses, strategy.BPresses);
     static long Cost(long APresses, long BPresses) => 3 * APresses + 1 * BPresses;
@@ -153,7 +177,9 @@ static class Extensions
         var groups = Regexes.Prize().Match(line).Groups;
         var x = long.Parse(groups[1].Value) + 10000000000000;
         var y = long.Parse(groups[2].Value) + 10000000000000;
-        return new Prize(x, y);
+        var prize = new Prize(x, y);
+        Console.WriteLine(prize);
+        return prize;
     }
 }
 
@@ -173,4 +199,4 @@ record Button(long XIncrement, long YIncrement);
 
 record Prize(long X, long Y);
 
-record Strategy(long APresses, long BPresses);
+record struct Strategy(long APresses, long BPresses);
