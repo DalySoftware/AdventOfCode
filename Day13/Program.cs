@@ -2,25 +2,25 @@
 
 using System.Text.RegularExpressions;
 
-// var input = """
-//             Button A: X+94, Y+34
-//             Button B: X+22, Y+67
-//             Prize: X=8400, Y=5400
-//
-//             Button A: X+26, Y+66
-//             Button B: X+67, Y+21
-//             Prize: X=12748, Y=12176
-//
-//             Button A: X+17, Y+86
-//             Button B: X+84, Y+37
-//             Prize: X=7870, Y=6450
-//
-//             Button A: X+69, Y+23
-//             Button B: X+27, Y+71
-//             Prize: X=18641, Y=10279
-//             """;
+var input = """
+            Button A: X+94, Y+34
+            Button B: X+22, Y+67
+            Prize: X=8400, Y=5400
 
-var input = File.ReadAllText("input.txt");
+            Button A: X+26, Y+66
+            Button B: X+67, Y+21
+            Prize: X=12748, Y=12176
+
+            Button A: X+17, Y+86
+            Button B: X+84, Y+37
+            Prize: X=7870, Y=6450
+
+            Button A: X+69, Y+23
+            Button B: X+27, Y+71
+            Prize: X=18641, Y=10279
+            """;
+
+// var input = File.ReadAllText("input.txt");
 
 var machines = input.Parse();
 var cost = machines.Sum(Extensions.Cost);
@@ -33,36 +33,93 @@ return;
 
 static class Extensions
 {
-    internal static int Cost(Machine machine) => machine.OptimalStrategy()?.Cost() ?? 0;
+    internal static long Cost(Machine machine) => machine.OptimalStrategy()?.Cost() ?? 0;
 
-    static Strategy? OptimalStrategy(this Machine machine) => machine.CandidateStrategies().FirstOrDefault();
-
-    // Lowest cost first
-    static IEnumerable<Strategy> CandidateStrategies(this Machine machine)
+    static Strategy? OptimalStrategy(this Machine machine)
     {
-        var aPresses = 0;
-        while (aPresses <= 100)
+        var xStrategies = CandidateStrategies(machine.A.XIncrement, machine.B.XIncrement, machine.Prize.X);
+        var yStrategies = CandidateStrategies(machine.A.YIncrement, machine.B.YIncrement, machine.Prize.Y);
+
+        // Hit both the X and Y coordinate
+        var validStrategies =
+            xStrategies.Where(x => yStrategies.Any(y => x.APresses == y.APresses && x.BPresses == y.BPresses));
+        return validStrategies.MinBy(Cost);
+    }
+
+    static long Gcd(long a, long b, out long x, out long y)
+    {
+        if (b == 0)
         {
-            var bPresses = 0;
-            var x = 0;
-            var y = 0;
-            while (x < machine.Prize.X && y < machine.Prize.Y && bPresses <= 100)
-            {
-                x = aPresses * machine.A.XIncrement + bPresses * machine.B.XIncrement;
-                y = aPresses * machine.A.YIncrement + bPresses * machine.B.YIncrement;
+            x = 1;
+            y = 0;
+            return a;
+        }
 
-                if (x == machine.Prize.X && y == machine.Prize.Y) yield return new Strategy(aPresses, bPresses);
+        var gcd = Gcd(b, a % b, out x, out y);
+        var temp = y;
+        y = x - a / b * y;
+        x = temp;
 
-                bPresses++;
-            }
+        return gcd;
+    }
 
+    static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
+    {
+        var gcd = Gcd(aIncrement, bIncrement, out var a0, out var b0);
 
-            aPresses += 1;
+        if (target % gcd != 0) yield break; // No solutions if T is not divisible by GCD
+
+        // Scale the solution to satisfy the equation X * A + Y * B = T
+        a0 *= target / gcd;
+        b0 *= target / gcd;
+
+        Console.WriteLine(a0);
+        Console.WriteLine(b0);
+
+        // Generate all positive solutions
+        var k = 0;
+        while (true)
+        {
+            var aPresses = a0 + k * (bIncrement / gcd);
+            var bPresses = b0 - k * (aIncrement / gcd);
+
+            Console.WriteLine(aPresses + " | " + bPresses);
+
+            if (aPresses > 0 && bPresses > 0)
+                yield return new Strategy(aPresses, bPresses);
+            else if (aPresses <= 0 || bPresses <= 0) break;
+
+            k++;
         }
     }
 
-    static int Cost(this Strategy strategy) => Cost(strategy.APresses, strategy.BPresses);
-    static int Cost(int APresses, int BPresses) => 3 * APresses + 1 * BPresses;
+    // static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target)
+    // {
+    //     var gcd = GreatestCommonDivisor(aIncrement, bIncrement);
+    //
+    //     // Check if T is divisible by the GCD of X and Y
+    //     if (target % gcd != 0) yield break; // No solutions
+    //
+    //     // Reduce the equation by GCD
+    //     aIncrement /= gcd;
+    //     bIncrement /= gcd;
+    //     target /= gcd;
+    //
+    //     // Iterate to find all valid combinations
+    //     for (var aPresses = 0L; aPresses * aIncrement <= target && aPresses >= 0; aPresses++)
+    //     {
+    //         if (aPresses % 1_000_000 == 0) Console.WriteLine(aPresses);
+    //         var remainder = target - aIncrement * aPresses;
+    //         if (remainder % bIncrement != 0) continue;
+    //
+    //         var bPresses = remainder / bIncrement;
+    //         yield return new Strategy(aPresses, bPresses);
+    //     }
+    // }
+
+
+    static long Cost(this Strategy strategy) => Cost(strategy.APresses, strategy.BPresses);
+    static long Cost(long APresses, long BPresses) => 3 * APresses + 1 * BPresses;
 
 
     internal static Machine[] Parse(this string input)
@@ -87,7 +144,9 @@ static class Extensions
     static Prize ParsePrize(this string line)
     {
         var groups = Regexes.Prize().Match(line).Groups;
-        return new Prize(int.Parse(groups[1].Value), int.Parse(groups[2].Value));
+        var x = long.Parse(groups[1].Value) + 10000000000000;
+        var y = long.Parse(groups[2].Value) + 10000000000000;
+        return new Prize(x, y);
     }
 }
 
@@ -103,8 +162,8 @@ partial class Regexes
 
 record Machine(Button A, Button B, Prize Prize);
 
-record Button(int XIncrement, int YIncrement);
+record Button(long XIncrement, long YIncrement);
 
-record Prize(int X, int Y);
+record Prize(long X, long Y);
 
-record Strategy(int APresses, int BPresses);
+record Strategy(long APresses, long BPresses);
