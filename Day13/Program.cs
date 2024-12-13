@@ -64,71 +64,41 @@ static class Extensions
         return (gcd, y1, x1 - a / b * y1);
     }
 
-    // Method to find the particular solution for the Diophantine equations
+    // Method to solve the Diophantine system and minimize the cost function
     public static Strategy? SolveDiophantine(Machine machine)
     {
-        // Step 1: Find the gcd of the coefficients
-        long gcd1, x1, y1;
-        (gcd1, x1, y1) = ExtendedGCD(machine.A.XIncrement, machine.B.XIncrement);
-
-        // Check if the gcd divides X
-        if (machine.Prize.X % gcd1 != 0)
-        {
-            Console.WriteLine("No solution exists for X.");
-            return null;
-        }
-
-        var scale = machine.Prize.X / gcd1;
-        x1 *= scale;
-        y1 *= scale;
-
-        var (gcd2, _, _) = ExtendedGCD(machine.A.YIncrement, machine.B.YIncrement);
-
-        // Check if the gcd divides Y
-        if (machine.Prize.Y % gcd2 != 0)
-        {
-            Console.WriteLine("No solution exists for Y.");
-            return null;
-        }
-
-        // Now x1 and y1 provide one solution for the first equation
-        // and x2 and y2 provide a solution for the second equation
-
-        // Combine the two results into one system using the method for solving linear Diophantine systems
-        // We need to find integers p and q such that we satisfy both equations.
-
-        // Now that we have the general solution, minimize the cost function
+        // Step 1: Solve the first equation for BPresses in terms of APresses
         var minCost = long.MaxValue;
-        long optimalAPresses = -1;
-        long optimalBPresses = -1;
+        Strategy? strategy = null;
 
-        // We loop over a reasonable range to adjust the general solution
-        // Since this is still a large scale problem, we must minimize directly.
-        for (long p = -100000; p <= 100000; p++) // Adjust the loop range as needed
+        // Iterate over possible values of APresses
+        for (long aPresses = 0; aPresses <= machine.Prize.X / machine.A.XIncrement; aPresses++)
         {
-            var aPresses = x1 + p * machine.B.XIncrement;
-            var bPresses = y1 - p * machine.A.XIncrement;
+            // Calculate BPresses from the first equation
+            var remainingX = machine.Prize.X - aPresses * machine.A.XIncrement;
+            if (remainingX % machine.B.XIncrement != 0) continue;
 
-            if (aPresses < 0 || bPresses < 0 || aPresses + bPresses <= 0) continue;
+            var bPresses = remainingX / machine.B.XIncrement;
 
-            var cost = 3 * aPresses + bPresses;
-            if (cost < minCost)
+            // Check if the second equation is satisfied
+            if (aPresses * machine.A.YIncrement + bPresses * machine.B.YIncrement != machine.Prize.Y) continue;
+
+            // Calculate the cost
+            var candidateStrategy = new Strategy(aPresses, bPresses);
+            var cost = candidateStrategy.Cost();
+
+            // Minimize the cost
+            if (cost < minCost && aPresses + bPresses > 0)
             {
+                Console.WriteLine("New minimum: " + strategy);
+                strategy = candidateStrategy;
                 minCost = cost;
-                optimalAPresses = aPresses;
-                optimalBPresses = bPresses;
             }
         }
 
-        if (optimalAPresses != -1 && optimalBPresses != -1)
-        {
-            var strategy = new Strategy(optimalAPresses, optimalBPresses);
-            Console.WriteLine("Found optimal: " + strategy);
-            return strategy;
-        }
-
-        Console.WriteLine("No valid solution found.");
-        return null;
+        if (strategy == null) Console.WriteLine("No solution");
+        else Console.WriteLine("Optimal: " + strategy);
+        return strategy;
     }
 
     static long Cost(this Strategy strategy) => Cost(strategy.APresses, strategy.BPresses);
@@ -158,8 +128,8 @@ static class Extensions
     static Prize ParsePrize(this string line)
     {
         var groups = Regexes.Prize().Match(line).Groups;
-        var x = long.Parse(groups[1].Value); //+ 10000000000000;
-        var y = long.Parse(groups[2].Value); //+ 10000000000000;
+        var x = long.Parse(groups[1].Value) + 10000000000000;
+        var y = long.Parse(groups[2].Value) + 10000000000000;
         var prize = new Prize(x, y);
         Console.WriteLine(prize);
         return prize;

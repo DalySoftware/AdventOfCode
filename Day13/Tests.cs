@@ -10,6 +10,7 @@ class Tests
     {
         // FindsRootWithoutExtraCondition();
         // FindsRootWithoutExtraCondition2();
+        BigTest();
     }
 
 
@@ -34,4 +35,13 @@ class Tests
     //     if (!strategies.Any(s => s.APresses == 5 || s.BPresses == 1))
     //         throw new TestFailException();
     // }
+
+    internal static void BigTest()
+    {
+        var machine = new Machine(new Button(3, 5), new Button(2, 7), new Prize(10000000000000, 8000000000000));
+        var strategy = Extensions.SolveDiophantine(machine);
+
+        if (strategy == null || strategy?.APresses != 0 || strategy?.BPresses != (long)2e12)
+            throw new TestFailException();
+    }
 }
