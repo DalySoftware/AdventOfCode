@@ -60,39 +60,41 @@ static class Extensions
     internal static IEnumerable<Strategy> CandidateStrategies(long aIncrement, long bIncrement, long target,
         Func<Strategy, bool> extraCondition)
     {
-        // Step 1: Find the greatest common divisor (gcd) of aIncrement and bIncrement using the Euclidean algorithm
+        // Step 1: Find the greatest common divisor (gcd) of aIncrement and bIncrement
         var gcd = GCD(aIncrement, bIncrement);
 
-        // Step 2: If the gcd does not divide the target, there is no solution
+        // Step 2: Check if the target is divisible by gcd
         if (target % gcd != 0) yield break; // No solution
 
         Console.WriteLine("gcd hit");
 
-        // Step 3: Use the extended Euclidean algorithm to find the particular solution
-        var (a0, b0) = ExtendedGCD(aIncrement, bIncrement);
+        // Step 3: Scale coefficients and target by gcd
+        var scaleFactor = target / gcd;
+        aIncrement /= gcd;
+        bIncrement /= gcd;
 
-        // Step 4: Scale the particular solution to match the target
-        a0 *= target / gcd;
-        b0 *= target / gcd;
+        // Step 4: Use the extended Euclidean algorithm to find a particular solution
+        var (x0, y0) = ExtendedGCD(aIncrement, bIncrement);
+        x0 *= scaleFactor;
+        y0 *= scaleFactor;
 
-        // Step 5: Now find the general solution
-        var stepA = bIncrement / gcd;
-        var stepB = aIncrement / gcd;
+        // Step 5: Define step sizes for the general solution
+        var xStep = bIncrement; // Step size for x
+        var yStep = aIncrement; // Step size for y
 
-        // Step 6: Adjust k to find all positive solutions
-        // We need k such that both a0 + k * stepA > 0 and b0 - k * stepB > 0
-        var kMin = (1 - a0 + stepA - 1) / stepA; // ceil(1 - x0 / stepA)
-        var kMax = (b0 - 1) / stepB; // floor(y0 / stepB)
+        // Step 6: Determine bounds for k such that x and y remain non-negative
+        var kMin = (long)Math.Ceiling((1.0 - x0) / xStep); // Ensure x > 0
+        var kMax = (long)Math.Floor((y0 - 1.0) / yStep); // Ensure y > 0
 
-        Console.WriteLine("kMin: " + kMin);
-        Console.WriteLine("kMax: " + kMax);
+        // If bounds are invalid, no solutions exist
+        if (kMin > kMax) yield break;
 
-        // Generate all valid solutions where both a0 + k * stepA > 0 and b0 - k * stepB > 0
-        for (var k = kMin; k <= kMax && a0 + k * stepA > 0 && b0 - k * stepB > 0; k++)
+        // Step 7: Generate valid solutions within bounds
+        for (var k = kMin; k <= kMax; k++)
         {
-            if (k % 100_000 == 0) Console.WriteLine(k);
-            var x = a0 + k * stepA;
-            var y = b0 - k * stepB;
+            if (k % 10_000_000 == 0) Console.WriteLine(k);
+            var x = x0 + k * xStep;
+            var y = y0 - k * yStep;
 
             var strategy = new Strategy(x, y);
             if (extraCondition(strategy))
@@ -102,7 +104,6 @@ static class Extensions
             }
         }
     }
-
 
     // Helper function to compute GCD
     static readonly Dictionary<(long, long), long> GcdCache = new();
