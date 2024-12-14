@@ -17,16 +17,30 @@ using System.Text.RegularExpressions;
 //             p=9,5 v=-3,-3
 //             """;
 
-Console.WriteLine(Mod(-5, 103));
-Console.WriteLine(Mod(105, 103));
+var input = File.ReadAllText("input.txt");
 
-// var input = File.ReadAllText("input.txt");
+var map = new Map(Parse(input).ToArray());
 
-// var map = new Map(Parse(input).ToArray());
-// map.MoveRobots(100);
+var initialIncrement = int.Parse(Environment.GetCommandLineArgs()[1]);
 
-// Console.WriteLine("Safety factor: ");
-// Console.WriteLine(map.SafetyFactor);
+map.MoveRobots(initialIncrement);
+map.PlotRobots();
+
+ConsoleKey key;
+do
+{
+    key = Console.ReadKey().Key;
+    switch (key)
+    {
+        case ConsoleKey.LeftArrow:
+            map.MoveRobots(-1);
+            break;
+        case ConsoleKey.RightArrow:
+            map.MoveRobots(1);
+            break;
+    }
+} while (key != ConsoleKey.Escape && key != ConsoleKey.Q);
+
 
 return;
 
@@ -39,27 +53,27 @@ IEnumerable<Robot> Parse(string str) => str
             new Velocity(groups[3].ToInt(), groups[4].ToInt()));
     });
 
-int Mod(int num, int modulus) => (num % modulus + modulus) % modulus;
-
-
-record Map(Robot[] Robots)
+class Map(Robot[] robots)
 {
     // internal int Width => 11;
     // internal int Height => 7;
 
+    internal Robot[] Robots { get; } = robots;
+
     internal int Width => 101;
     internal int Height => 103;
 
-    int MidPointY => (Width - 1) / 2;
-    int MidPointX => (Height - 1) / 2;
+    int MidPointY => (Height - 1) / 2;
+    int MidPointX => (Width - 1) / 2;
+
+    int _iteration = 0;
 
     internal void MoveRobots(int increment)
     {
-        foreach (var robot in Robots)
-        {
-            robot.Move(this, increment);
-            Console.WriteLine(robot.Position);
-        }
+        foreach (var robot in Robots) robot.Move(this, increment);
+        _iteration += increment;
+        PlotRobots();
+        _seenPositions.Add(Robots.Select(r => r.Position).ToArray());
     }
 
     internal int SafetyFactor
@@ -76,6 +90,34 @@ record Map(Robot[] Robots)
         .Where(robot => robot.Position.X != MidPointX && robot.Position.Y != MidPointY)
         .GroupBy(robot => (robot.Position.X > MidPointX, robot.Position.Y > MidPointY))
         .Select(group => group.Count());
+
+    HashSet<Position[]> _seenPositions = new();
+    bool HasSeenPosition => _seenPositions.Any(seen => Enumerable.SequenceEqual(seen, Robots.Select(r => r.Position)));
+
+    internal void PlotRobots()
+    {
+        Console.WriteLine();
+        Console.WriteLine();
+        for (var x = 0; x < Width; x++)
+        {
+            for (var y = 0; y < Height; y++)
+            {
+                if (x == MidPointX || y == MidPointY)
+                {
+                    Console.Write(" ");
+                    continue;
+                }
+
+                var value = Robots.Count(r => r.Position.X == x && r.Position.Y == y);
+                var str = value == 0 ? "." : value.ToString();
+                Console.Write(str);
+            }
+
+            Console.Write(Environment.NewLine);
+        }
+
+        Console.WriteLine(_iteration + (HasSeenPosition ? " - Seen" : ""));
+    }
 }
 
 
