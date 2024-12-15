@@ -18,15 +18,14 @@ var input = File.ReadAllText("input.txt");
 var map = Parse(input);
 
 map.Render();
-
 map.ExecuteRobotInstructions();
-
 map.Render();
 
 var distance = map.TotalBoxDistances;
 
 Console.WriteLine("Distance:");
 Console.WriteLine(distance);
+Console.WriteLine(map.Instructions.Length);
 
 return;
 
@@ -41,9 +40,9 @@ Map Parse(string input)
             .Select<char, Entity?>((ch, xIndex) =>
                 ch switch
                 {
-                    '#' => new Boundary(new Position(xIndex, a.yIndex)),
-                    'O' => new Box(new Position(xIndex, a.yIndex)),
-                    '@' => new Robot(new Position(xIndex, a.yIndex)),
+                    '#' => new Boundary(new Position(xIndex * 2, a.yIndex)),
+                    'O' => new Box(new Position(xIndex * 2, a.yIndex)),
+                    '@' => new Robot(new Position(xIndex * 2, a.yIndex)),
                     _ => null,
                 }))
         .Where(x => x != null)
@@ -60,63 +59,111 @@ Map Parse(string input)
             _ => throw new ArgumentOutOfRangeException(nameof(ch), ch, null),
         }))
         .ToArray();
+
     return new Map(entities, instructions);
 }
 
 record Map(Entity[] Entities, Direction[] Instructions)
 {
-    Entity? EntityAt(Position position) => Entities.SingleOrDefault(e => e.Position == position);
+    Entity? EntityAt(Position position)
+    {
+        return Entities.FirstOrDefault(e
+            => e.Position == position || (e.Width == 2 && e.Position.NextIn(Direction.Right) == position));
+    }
+
+    IEnumerable<Entity> EntitiesAt(Position position, int width)
+    {
+        var left = EntityAt(position);
+        if (left is not null) yield return left;
+
+
+        if (width == 1) yield break;
+
+        var right = EntityAt(position.NextIn(Direction.Right));
+        if (right is not null && right != left) yield return right;
+    }
 
     Robot GetRobot => Entities.OfType<Robot>().Single();
 
     internal void ExecuteRobotInstructions()
     {
-        foreach (var instruction in Instructions) TryMove(GetRobot, instruction);
+        foreach (var instruction in Instructions)
+            TryMove(GetRobot, instruction);
     }
 
-    internal int TotalBoxDistances => Entities.OfType<Box>().Sum(b => b.Position.Distance);
-
-    bool TryMove(Entity entity, Direction direction)
+    internal int TotalBoxDistances => Entities.OfType<Box>().Sum(b =>
     {
-        if (entity is Boundary) return false;
+        var distance = b.Position.Distance;
+        return distance;
+    });
+
+    (HashSet<Entity> Movable, bool Failed) CheckIfCanMove(Entity entity, Direction direction)
+    {
+        if (entity is Boundary) return ([], true);
 
         var newPosition = entity.Position.NextIn(direction);
-        var entityInWay = EntityAt(newPosition);
+        var entitiesInWay = EntitiesAt(newPosition, entity.Width)
+            .Where(inWay => inWay != entity) // Is not itself
+            .ToArray();
 
-        if (entityInWay == null)
+        List<Entity> toMove = [entity];
+        foreach (var inWay in entitiesInWay)
         {
-            entity.Position = newPosition;
-            return true;
+            var canMove = CheckIfCanMove(inWay, direction);
+            if (canMove.Failed) return ([], true);
+
+            toMove.AddRange(canMove.Movable);
         }
 
-        if (!TryMove(entityInWay, direction)) return false;
-
-        entity.Position = newPosition;
-        return true;
+        return (toMove.ToHashSet(), false);
     }
 
-    internal void Render()
+    void TryMove(Entity entity, Direction direction)
+    {
+        var results = CheckIfCanMove(entity, direction);
+        if (results.Failed) return;
+
+        foreach (var toMove in results.Movable) toMove.Position = toMove.Position.NextIn(direction);
+    }
+
+    internal void Render(Direction? currentInstruction = null)
     {
         Console.WriteLine();
         Console.WriteLine();
-        for (var x = 0; x < Entities.Max(e => e.Position.X); x++)
+        for (var y = 0; y < Entities.Max(e => e.Position.Y) + 1; y++)
         {
-            for (var y = 0; y < Entities.Max(e => e.Position.Y); y++)
+            for (var x = 0; x < Entities.Max(e => e.Position.X) + 2; x++)
             {
                 var entity = EntityAt(new(x, y));
-                var ch = entity switch
+                switch (entity)
                 {
-                    Boundary => '#',
-                    Robot => '@',
-                    Box => 'O',
-                    _ => '.',
-                };
+                    case Boundary:
+                        Console.Write('#');
+                        break;
+                    case Robot:
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.Write('@');
+                        break;
+                    case Box when entity.Position.X == x:
+                        Console.ForegroundColor = ConsoleColor.DarkGreen;
+                        Console.Write('[');
+                        break;
+                    case Box when entity.Position.X == x - 1:
+                        Console.ForegroundColor = ConsoleColor.DarkGreen;
+                        Console.Write(']');
+                        break;
+                    default:
+                        Console.Write(' ');
+                        break;
+                }
 
-                Console.Write(ch);
+                Console.ResetColor();
             }
 
             Console.Write(Environment.NewLine);
         }
+
+        Console.WriteLine(currentInstruction.ToString());
     }
 };
 
@@ -135,16 +182,18 @@ record Position(int X, int Y)
         };
 };
 
-abstract class Entity(Position position)
+abstract class Entity(Position position, int width)
 {
     internal Position Position { get; set; } = position;
+
+    internal int Width { get; } = width;
 };
 
-class Box(Position position) : Entity(position);
+class Box(Position position) : Entity(position, 2);
 
-class Robot(Position position) : Entity(position);
+class Robot(Position position) : Entity(position, 1);
 
-class Boundary(Position position) : Entity(position);
+class Boundary(Position position) : Entity(position, 2);
 
 enum Direction
 {
