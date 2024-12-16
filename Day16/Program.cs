@@ -28,7 +28,8 @@
 var input = File.ReadAllText("input.txt");
 
 var map = Parse(input);
-var score = map.MinimumScore();
+// var score = map.MinimumScore();
+var score = map.TilesOnBestPaths();
 
 Console.WriteLine("Score:");
 Console.WriteLine(score);
@@ -66,6 +67,15 @@ class Map(Entity[] entities)
 
     internal int MinimumScore() => GetPathsToEnd().Min(p => p.Last().Score);
 
+    internal int TilesOnBestPaths() =>
+        GetPathsToEnd()
+            .GroupBy(p => p.Last().Score)
+            .OrderBy(g => g.Key)
+            .First()
+            .SelectMany(p => p.Select(r => r.Position))
+            .Distinct()
+            .Count();
+
     IEnumerable<Reindeer[]> GetPathsToEnd()
     {
         var toProcess = new Queue<(Reindeer, Reindeer[])>();
@@ -81,13 +91,12 @@ class Map(Entity[] entities)
                 // foreach (var path in current.Item2) Console.WriteLine(path);
                 yield return history;
 
-            if (!seenStates.Add(reindeer))
-                continue;
-
             if (seenStates.Any(s =>
                     s.Position == reindeer.Position && s.Direction == reindeer.Direction && s.Score < reindeer.Score))
                 // Skip if we've already been here by a more efficient route.
                 continue;
+
+            seenStates.Add(reindeer);
 
             // Render(seenStates);
 
