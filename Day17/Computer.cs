@@ -1,24 +1,30 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 // var input = """
-//             Register A: 729
+//             Register A: 2024
 //             Register B: 0
 //             Register C: 0
 //
-//             Program: 0,1,5,4,3,0
+//             Program: 0,3,5,4,3,0
 //             """;
 
 var input = """
-            Register A: 22817223
+            Register A: 20291778
             Register B: 0
             Register C: 0
 
             Program: 2,4,1,2,7,5,4,5,0,3,1,7,5,5,3,0
             """;
 
-var computer = Parse(input);
+var initial = Parse(input);
+initial.Execute();
 
-computer.Execute();
+var computerComputer = new ComputerComputer(initial);
+
+var result = computerComputer.LowestCopyValue();
+
+Console.WriteLine("Result: ");
+Console.WriteLine(result);
 
 return;
 
@@ -27,12 +33,12 @@ Computer Parse(string input)
     var lines = input.Split(["\r\n", "\n"], StringSplitOptions.TrimEntries)
         .ToArray();
 
-    var a = int.Parse(lines[0].Replace("Register A: ", ""));
-    var b = int.Parse(lines[1].Replace("Register B: ", ""));
-    var c = int.Parse(lines[2].Replace("Register C: ", ""));
+    var a = long.Parse(lines[0].Replace("Register A: ", ""));
+    var b = long.Parse(lines[1].Replace("Register B: ", ""));
+    var c = long.Parse(lines[2].Replace("Register C: ", ""));
 
     var instructionString = lines[4].Replace("Program: ", "");
-    var instructions = instructionString.Split(",").Select(int.Parse).ToArray();
+    var instructions = instructionString.Split(",").Select(long.Parse).ToArray();
 
     return new Computer(instructions, [a, b, c]);
 }
@@ -49,25 +55,76 @@ enum Instructions
     Cdv = 7,
 }
 
-record Computer(int[] Inputs, int[] Registers)
+record ComputerComputer(Computer Initial)
 {
-    int _registerA = Registers[0];
-    int _registerB = Registers[1];
-    int _registerC = Registers[2];
+    internal long LowestCopyValue()
+    {
+        Initial.Execute();
 
-    int _instructionPointer = 0;
+        var target = Initial.Inputs;
+        var reversedTarget = target.Reverse().ToArray();
 
-    readonly List<int> _outputs = [];
+        var registersBC = Initial.Registers.Skip(1).ToArray();
+
+        var i = 0;
+        List<long> digits = [];
+
+        while (i < target.Length)
+        {
+            var range = Enumerable.Range(0, 8);
+
+            var digit = range.First(r =>
+            {
+                var guess = ReadDigits(digits) * 8 + r;
+                var computer = new Computer(Initial.Inputs, registersBC.Prepend(guess).ToArray());
+                computer.Execute();
+                var output = computer.Outputs.ToArray().Reverse().ToArray()[i];
+                Console.WriteLine(Format(computer.Outputs.ToArray(), target));
+                return output == reversedTarget[i];
+            });
+
+            digits.Add(digit);
+            Console.WriteLine(ReadDigits(digits));
+            i++;
+        }
+
+        return ReadDigits(digits);
+    }
+
+    long ReadDigits(IEnumerable<long> digits) => digits.Aggregate(0L, (cur, val) => cur * 8 + val);
+
+    internal static string Format(long[] output, long[] target) => string.Join(",", FormatParts(output, target));
+
+    static IEnumerable<string> FormatParts(long[] output, long[] target)
+    {
+        const string red = "\u001b[31m";
+        const string green = "\u001b[32m";
+        const string reset = "\u001b[0m";
+
+        for (var i = output.Length; i > 0; i--)
+        {
+            var color = output[^i] == target[^i] ? green : red;
+            yield return color + output[^i] + reset;
+        }
+    }
+}
+
+record Computer(long[] Inputs, long[] Registers)
+{
+    long _registerA = Registers[0];
+    long _registerB = Registers[1];
+    long _registerC = Registers[2];
+
+    long _instructionPointer = 0;
+
+    internal List<long> Outputs { get; } = [];
 
     internal void Execute()
     {
         while (TryExecuteNext())
         {
         }
-
-        Console.WriteLine("Finished executing");
-
-        if (_outputs.Count > 0) Console.WriteLine(string.Join(",", _outputs));
+        // if (Outputs.Count > 0) Console.WriteLine(string.Join(",", Outputs));
     }
 
     bool TryExecuteNext()
@@ -79,12 +136,12 @@ record Computer(int[] Inputs, int[] Registers)
         var result = Execute(instruction, operand);
 
         if (result is not Jumped) _instructionPointer += 2;
-        if (result is OutputResult output) _outputs.Add(output.Output);
+        if (result is OutputResult output) Outputs.Add(output.Output);
 
         return true;
     }
 
-    int ComboOperand(int operand) => operand switch
+    long ComboOperand(long operand) => operand switch
     {
         >= 0 and <= 3 => operand,
         4 => _registerA,
@@ -93,12 +150,12 @@ record Computer(int[] Inputs, int[] Registers)
         _ => throw new ArgumentOutOfRangeException(nameof(operand)),
     };
 
-    ExecutionResult Execute(Instructions instruction, int literalOperand)
+    ExecutionResult Execute(Instructions instruction, long literalOperand)
     {
         switch (instruction)
         {
             case Instructions.Adv:
-                var advDenominator = (int)Math.Pow(2, ComboOperand(literalOperand));
+                var advDenominator = (long)Math.Pow(2, ComboOperand(literalOperand));
                 _registerA /= advDenominator;
                 return ExecutionResult.Void;
             case Instructions.Bxl:
@@ -117,11 +174,11 @@ record Computer(int[] Inputs, int[] Registers)
             case Instructions.Output:
                 return new OutputResult(ComboOperand(literalOperand) % 8);
             case Instructions.Bdv:
-                var bdvDenominator = (int)Math.Pow(2, ComboOperand(literalOperand));
+                var bdvDenominator = (long)Math.Pow(2, ComboOperand(literalOperand));
                 _registerB = _registerA / bdvDenominator;
                 return ExecutionResult.Void;
             case Instructions.Cdv:
-                var cdvDenominator = (int)Math.Pow(2, ComboOperand(literalOperand));
+                var cdvDenominator = (long)Math.Pow(2, ComboOperand(literalOperand));
                 _registerC = _registerA / cdvDenominator;
                 return ExecutionResult.Void;
             default:
@@ -136,7 +193,7 @@ record Computer(int[] Inputs, int[] Registers)
 
     record Void : ExecutionResult;
 
-    record OutputResult(int Output) : ExecutionResult;
+    record OutputResult(long Output) : ExecutionResult;
 
     record Jumped : ExecutionResult;
 }
