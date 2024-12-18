@@ -30,9 +30,9 @@
 
 var input = File.ReadAllText("input.txt");
 
-var map = new Map(Parse(input, 1024));
+var map = new Map(Parse(input, int.MaxValue));
 
-var result = map.ShortestPathToExit();
+var result = map.FirstBlockingByte();
 
 Console.WriteLine("Result:");
 Console.WriteLine(result);
@@ -67,33 +67,47 @@ class Map(Entity[] entities)
     const int MaxY = 70;
     Position Exit => new(MaxX, MaxY);
     Player Player => Entities.OfType<Player>().Single();
-    IEnumerable<Byte> Bytes => Entities.OfType<Byte>();
+    IEnumerable<Byte> AllBytes => Entities.OfType<Byte>();
+    IEnumerable<Byte> Bytes => AllBytes.Take(_takeBytes);
 
-    internal int ShortestPathToExit() => ShortestPathToExit(Player);
+    int _takeBytes = 1;
 
-    int ShortestPathToExit(Player player)
+    internal Position FirstBlockingByte()
     {
-        var toProcess = new Stack<(Player, int)>();
-        toProcess.Push((player, 0));
-
-        Dictionary<Position, int> minimumCache = new();
-
-        while (toProcess.TryPop(out var current))
+        while (_takeBytes <= AllBytes.Count())
         {
-            if (minimumCache.Count % 10 == 0) Console.WriteLine(minimumCache.Count);
-            // Console.WriteLine(current);
+            Console.WriteLine(_takeBytes);
+            if (!CanReachExit())
+            {
+                var blocker = Bytes.Last().Position;
+                Console.WriteLine(_takeBytes + " : " + blocker);
+                return blocker;
+            }
 
-            var (currentPlayer, distance) = current;
-
-            if (minimumCache.TryGetValue(currentPlayer.Position, out var cached) && cached <= distance) continue;
-
-            minimumCache[currentPlayer.Position] = distance;
-
-            foreach (var newPosition in Neighbours(currentPlayer.Position))
-                toProcess.Push((new Player(newPosition), distance + 1));
+            _takeBytes++;
         }
 
-        return minimumCache[Exit];
+        throw new Exception("No bytes blocked it");
+    }
+
+    bool CanReachExit()
+    {
+        var toProcess = new Stack<Player>();
+        toProcess.Push(Player);
+
+        HashSet<Player> visited = [];
+
+        while (toProcess.TryPop(out var currentPlayer))
+        {
+            // Console.WriteLine(current);
+
+            if (!visited.Add(currentPlayer)) continue;
+            if (currentPlayer.Position == Exit) return true;
+            foreach (var newPosition in Neighbours(currentPlayer.Position))
+                toProcess.Push(new Player(newPosition));
+        }
+
+        return false;
     }
 
 
