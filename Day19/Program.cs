@@ -15,42 +15,54 @@
 
 var input = File.ReadAllText("input.txt");
 
-var (designs, towels) = Parse(input);
+var (designs, towels) = Solver.Parse(input);
 
-var designCount = PossibleDesigns(designs, towels);
+var count = Solver.NumberOfWays(designs, towels);
 
 Console.WriteLine("Result:");
-Console.WriteLine(designCount);
+Console.WriteLine(count);
 
 return;
 
-int PossibleDesigns(Design[] designs, Towel[] towels) => designs.Count(d => IsPossible(d.Pattern, towels));
-
-bool IsPossible(string pattern, Towel[] towels) => WaysToMakePattern(pattern, towels).Any();
-
-IEnumerable<Towel[]> WaysToMakePattern(string pattern, Towel[] towels)
+static class Solver
 {
-    if (pattern == string.Empty) return [towels];
+    internal static int NumberOfWays(Design[] designs, Towel[] towels) =>
+        designs.Sum(d => WaysPossible(d.Pattern, towels));
 
-    var possibleStarts = towels.Where(t => t.MatchesStart(pattern));
-    return possibleStarts.SelectMany(p => WaysToMakePattern(pattern[p.Pattern.Length..], [..towels, p]));
+    static int WaysPossible(string pattern, Towel[] towels) =>
+        WaysToMakePattern(pattern, towels, Enumerable.Empty<Towel>());
+
+    static int WaysToMakePattern(string pattern, Towel[] towelsAvailable, IEnumerable<Towel> towelsUsed)
+    {
+        if (pattern == string.Empty) return towelsUsed.Distinct().Count();
+
+        var possibleStarts = towelsAvailable.Where(t => CachedMatchesStart(t, pattern));
+        return possibleStarts.Sum(p =>
+            WaysToMakePattern(pattern[p.Pattern.Length..], towelsAvailable, towelsUsed.Append(p)));
+    }
+
+    internal static (Design[] Designs, Towel[] Towels) Parse(string input)
+    {
+        var lines = input.Split(["\r\n", "\n"], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var towels = lines[0].Split(",", StringSplitOptions.TrimEntries).Select(str => new Towel(str))
+            .ToArray();
+
+        var designs = lines[1..].Select(line => new Design(line)).ToArray();
+        return (designs, towels);
+    }
+
+    internal readonly record struct Design(string Pattern);
+
+    internal readonly record struct Towel(string Pattern);
+
+    static readonly Dictionary<(Towel, string), bool> MatchesCache = new();
+
+    static bool CachedMatchesStart(Towel towel, string pattern) =>
+        MatchesCache.TryGetValue((towel, pattern), out var cached)
+            ? cached
+            : MatchesCache[(towel, pattern)] = MatchesStart(towel, pattern);
+
+    static bool MatchesStart(Towel towel, string pattern)
+        => towel.Pattern.Length <= pattern.Length &&
+           pattern[..towel.Pattern.Length] == towel.Pattern;
 }
-
-(Design[] Designs, Towel[] Towels) Parse(string input)
-{
-    var lines = input.Split(["\r\n", "\n"], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-    var towels = lines[0].Split(",", StringSplitOptions.TrimEntries).Select(str => new Towel(str))
-        .ToArray();
-
-    var designs = lines[1..].Select(line => new Design(line)).ToArray();
-    return (designs, towels);
-}
-
-record Design(string Pattern);
-
-record Towel(string Pattern)
-{
-    internal bool MatchesStart(string pattern) =>
-        Pattern.Length <= pattern.Length &&
-        Pattern.Select((color, index) => (color, index)).All(x => pattern[x.index] == x.color);
-};
