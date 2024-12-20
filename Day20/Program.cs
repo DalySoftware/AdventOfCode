@@ -22,13 +22,13 @@ var input = File.ReadAllText("input.txt");
 
 var map = Parse(input);
 
-var cheats = map.GetCheats();
+var cheats = map.GetCheats(100);
 
 foreach (var group in cheats.OrderBy(g => g.Key))
     Console.WriteLine($"There are {group.Count()} cheats that save {group.Key} picoseconds");
 
 Console.WriteLine("Result:");
-Console.WriteLine(cheats.Where(kv => kv.Key >= 100).SelectMany(kv => kv).Count());
+Console.WriteLine(cheats.SelectMany(kv => kv).Count());
 
 return;
 
@@ -48,7 +48,10 @@ Map Parse(string input) =>
         .Where(e => e != null)
         .ToArray()!);
 
-record struct Position(int X, int Y);
+readonly record struct Position(int X, int Y)
+{
+    internal int NewYorkDistance(Position other) => Math.Abs(X - other.X) + Math.Abs(Y - other.Y);
+};
 
 
 abstract record Entity(Position Position);
@@ -63,35 +66,49 @@ record Cheat(Position Start, Position End, int Saving);
 
 class Map(Entity[] entities)
 {
-    IEnumerable<Wall> Walls => entities.OfType<Wall>();
-    Start Start => entities.OfType<Start>().Single();
-    End End => entities.OfType<End>().Single();
+    HashSet<Position> Walls { get; } = entities.OfType<Wall>().Select(s => s.Position).ToHashSet();
+    End End { get; } = entities.OfType<End>().Single();
 
-    internal ILookup<int, Cheat> GetCheats()
+    internal ILookup<int, Cheat> GetCheats(int minSaving)
     {
         var dictionary = TimesToEnd();
         HashSet<Cheat> allCheats = [];
         foreach (var kv in dictionary)
         {
             var (position, distance) = kv;
-            var immediateNeighbours = InBoundsNeighbours(position);
-            var twiceNeighbours =
-                immediateNeighbours
-                    .SelectMany(InBoundsNeighbours)
-                    .Where(n => n != position)
-                    .Where(n => Walls.All(w => w.Position != n))
-                    .Distinct();
+            var reachable = CachedNthNeighbours(position, 20);
 
-            var cheats = twiceNeighbours.Select(n =>
+            var cheats = reachable.Select(n =>
                 {
-                    var saving = dictionary[n] - (distance + 2);
+                    var saving = dictionary[n] - (distance + n.NewYorkDistance(position));
                     return new Cheat(position, n, saving);
                 })
-                .Where(c => c.Saving > 0);
-            foreach (var cheat in cheats) allCheats.Add(cheat);
+                .Where(c => c.Saving >= minSaving);
+            allCheats.UnionWith(cheats);
         }
 
         return allCheats.ToLookup(c => c.Saving);
+    }
+
+    readonly Dictionary<Position, Position[]> _cachedNthNeighbours = new();
+
+    Position[] CachedNthNeighbours(Position position, int n) =>
+        _cachedNthNeighbours.TryGetValue(position, out var cached)
+            ? cached
+            : _cachedNthNeighbours[position] = NthNeighbours(position, n).ToArray();
+
+    IEnumerable<Position> NthNeighbours(Position position, int n)
+    {
+        var startX = Math.Max(0, position.X - n);
+        var endX = Math.Min(MaxX, position.X + n);
+        var startY = Math.Max(0, position.Y - n);
+        var endY = Math.Min(MaxY, position.Y + n);
+
+        return Enumerable.Range(startX, endX - startX + 1)
+            .SelectMany(x => Enumerable.Range(startY, endY - startY + 1)
+                .Select(y => new Position(x, y)))
+            .Where(p => p.NewYorkDistance(position) <= n)
+            .Where(p => !Walls.Contains(p));
     }
 
     Dictionary<Position, int> TimesToEnd()
@@ -134,5 +151,5 @@ class Map(Entity[] entities)
         position.X >= 0 && position.X <= MaxX &&
         position.Y >= 0 && position.Y <= MaxY;
 
-    bool Blocked(Position position) => Walls.Any(b => b.Position == position);
+    bool Blocked(Position position) => Walls.Contains(position);
 }
