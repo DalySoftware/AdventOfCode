@@ -34,7 +34,7 @@ class Solver(DirectionalKeypad directional, NumericKeypad numeric)
 
     int Complexity(string code)
     {
-        var length = NestedSequence(code, 25).Length;
+        var length = NestedSequence(code, 3).Length;
         var numericPart = NumericPart(code);
         Console.WriteLine(length + " * " + numericPart);
 
@@ -54,32 +54,59 @@ abstract class Keypad
 
     Position StartingPosition => Keys[Symbols.Push];
 
-    internal IEnumerable<string> Sequences(string target) => Sequences(target, "", StartingPosition);
+    Dictionary<string, string[]> _targetSequenceCache = new();
 
-    IEnumerable<string> Sequences(string target, string prior, Position currentPosition)
+    // internal IEnumerable<string> Sequences(string target) => _targetSequenceCache.TryGetValue(target, out var cached)
+    //     ? cached
+    //     : _targetSequenceCache[target] = UncachedSequences(target).ToArray();
+
+    internal IEnumerable<string> Sequences(string target) => UncachedSequences(target);
+
+    List<string> UncachedSequences(string target)
     {
-        if (target == string.Empty)
+        Console.WriteLine("UncachedSequences");
+
+        var stack = new Stack<(string Target, StringBuilder Prior, Position CurrentPosition)>();
+        var results = new List<string>();
+
+        stack.Push((target, new StringBuilder(), StartingPosition));
+
+        while (stack.TryPop(out var current))
         {
-            yield return prior;
-            yield break;
+            var (currentTarget, prior, currentPosition) = current;
+
+            if (currentTarget == string.Empty)
+            {
+                results.Add(prior.ToString()); // Final conversion to string
+                continue;
+            }
+
+            var currentChar = currentTarget[0];
+            var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
+
+            foreach (var sequence in nextCharSequences)
+            {
+                // Clone the StringBuilder only when pushing to stack
+                var sb = new StringBuilder(prior.Length + sequence.Length + 1);
+                sb.Append(prior).Append(sequence).Append(Symbols.Push);
+                stack.Push((currentTarget[1..], sb, Keys[currentChar]));
+            }
         }
 
-        var currentChar = target[0];
-        var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
-        foreach (var x in nextCharSequences.SelectMany(s =>
-                     Sequences(target[1..], prior + s + Symbols.Push, Keys[currentChar])))
-            yield return x;
+        return results;
     }
 
-    readonly Dictionary<(Position, Position), string[]> _cache = new();
+
+    readonly Dictionary<(Position, Position), string[]> _positionSequenceCache = new();
 
     string[] CachedSequencesTo(Position fromPosition, Position toPosition) =>
-        _cache.TryGetValue((fromPosition, toPosition), out var cached)
+        _positionSequenceCache.TryGetValue((fromPosition, toPosition), out var cached)
             ? cached
-            : _cache[(fromPosition, toPosition)] = SequencesTo(fromPosition, toPosition).ToArray();
+            : _positionSequenceCache[(fromPosition, toPosition)] = SequencesTo(fromPosition, toPosition).ToArray();
 
     IEnumerable<string> SequencesTo(Position fromPosition, Position toPosition)
     {
+        Console.WriteLine("SequencesTo uncached");
         var sequence = new StringBuilder();
         var xDiff = toPosition.X - fromPosition.X;
         var yDiff = toPosition.Y - fromPosition.Y;
