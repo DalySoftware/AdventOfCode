@@ -12,7 +12,6 @@ string[] codes =
 ];
 
 var solver = new Solver(directional, numeric);
-solver.NestedSequence(codes[0]);
 
 Console.WriteLine("Result:");
 Console.WriteLine(solver.Complexity(codes));
@@ -21,16 +20,21 @@ return;
 
 class Solver(DirectionalKeypad directional, NumericKeypad numeric)
 {
-    internal string NestedSequence(string code) =>
-        numeric.Sequences(code)
-            .SelectMany(x1 => directional.Sequences(x1).SelectMany(x2 => directional.Sequences(x2)))
-            .MinBy(s => s.Length)!;
+    internal string NestedSequence(string code, int n)
+    {
+        var sequences = numeric.Sequences(code);
+
+        for (var i = 0; i < n; i++) sequences = sequences.SelectMany(directional.Sequences);
+
+        return sequences.MinBy(s => s.Length)!;
+    }
+
 
     internal int Complexity(IEnumerable<string> codes) => codes.Sum(Complexity);
 
     int Complexity(string code)
     {
-        var length = NestedSequence(code).Length;
+        var length = NestedSequence(code, 25).Length;
         var numericPart = NumericPart(code);
         Console.WriteLine(length + " * " + numericPart);
 
