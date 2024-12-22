@@ -1,25 +1,27 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
-List<long> inputs =
-[
-    1,
-    10,
-    100,
-    2024,
-];
+using PriceCache = System.Collections.Generic.Dictionary<long[], long>;
 
-// var inputs = ParseInput();
+// List<long> inputs =
+// [
+//     1,
+//     2,
+//     3,
+//     2024,
+// ];
+
+var inputs = ParseInput();
+
 var monkeys = inputs.Select(l => new Monkey(l)).ToArray();
 
-foreach (var monkey in monkeys) Console.WriteLine(monkey.NthNext(2000));
+foreach (var monkey in monkeys) monkey.NthNext(2000);
 
 var mergedDictionary = monkeys.Select(m => m.PriceCache).Merge();
 var bestSequence = mergedDictionary.MaxBy(kv => kv.Value).Key;
+Console.WriteLine("Sequence: " + string.Join(',', bestSequence));
 
-
-// var result = monkeys.Sum(i => i.NthNext(2000));
 Console.WriteLine("Result:");
-Console.WriteLine(string.Join(',', bestSequence));
+Console.WriteLine(mergedDictionary[bestSequence]);
 
 return;
 
@@ -31,22 +33,29 @@ IEnumerable<long> ParseInput() =>
 
 class Monkey(long initialSecret)
 {
-    internal Dictionary<long[], long> PriceCache { get; } = new(new DifferenceKeyComparer());
+    internal PriceCache PriceCache { get; } = new(new DifferenceKeyComparer());
 
     internal long NthNext(int n) =>
         Enumerable.Range(0, n)
             .Aggregate(
-                new FixedLengthQueue<long>([initialSecret], 4), // Start with a queue containing the initial value
-                (queue, accum) =>
+                (Secret: initialSecret,
+                    Differences: new FixedLengthQueue<long>([], 4)),
+                (state, _) =>
                 {
-                    var nextValue = queue.Last().Next();
-                    if (queue.Count == 4) PriceCache[queue.ToArray()] = nextValue;
+                    var (lastSecret, queue) = state;
 
-                    var difference = nextValue - queue.Last();
-                    return queue.Enqueue(difference);
+                    var currentSecret = lastSecret.Next();
+                    var currentPrice = currentSecret.LastDigit();
+
+                    var difference = currentPrice - lastSecret.LastDigit();
+                    queue.Enqueue(difference);
+                    if (queue.Count == 4)
+                        PriceCache.TryAdd(queue.ToArray(), currentPrice);
+
+                    return (currentSecret, queue);
                 }
             )
-            .Last();
+            .Secret;
 }
 
 class DifferenceKeyComparer : IEqualityComparer<long[]>
@@ -77,9 +86,9 @@ static class Extensions
 
     static long Prune(this long secret) => secret % 16777216;
 
-    internal static Dictionary<long[], long> Merge(this IEnumerable<Dictionary<long[], long>> dictionaries)
+    internal static PriceCache Merge(this IEnumerable<PriceCache> dictionaries)
     {
-        var result = new Dictionary<long[], long>(new DifferenceKeyComparer());
+        var result = new PriceCache(new DifferenceKeyComparer());
 
         foreach (var dict in dictionaries)
         foreach (var kvp in dict)
@@ -90,16 +99,17 @@ static class Extensions
 
         return result;
     }
+
+    internal static int LastDigit(this long num) => (int)(num % 10);
 }
 
 class FixedLengthQueue<T>(IEnumerable<T> items, int maxSize) : Queue<T>(items)
 {
     int MaxSize { get; } = maxSize;
 
-    public new FixedLengthQueue<T> Enqueue(T item)
+    public new void Enqueue(T item)
     {
         base.Enqueue(item);
         while (Count > MaxSize) Dequeue();
-        return this;
     }
 }
