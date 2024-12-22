@@ -1,6 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using System.Text;
+using Microsoft.Extensions.ObjectPool;
 
 var numeric = new NumericKeypad();
 var directional = new DirectionalKeypad();
@@ -62,38 +63,49 @@ abstract class Keypad
 
     internal IEnumerable<string> Sequences(string target) => UncachedSequences(target);
 
-    List<string> UncachedSequences(string target)
+    static readonly ObjectPool<StringBuilder> _sbPool =
+        new DefaultObjectPool<StringBuilder>(new StringBuilderPooledObjectPolicy());
+
+    IEnumerable<string> UncachedSequences(string target)
     {
-        Console.WriteLine("UncachedSequences");
+        var stack = new Queue<(string Target, StringBuilder Prior, Position CurrentPosition)>();
 
-        var stack = new Stack<(string Target, StringBuilder Prior, Position CurrentPosition)>();
-        var results = new List<string>();
+        // Get the initial StringBuilder from the pool
+        var initialSb = _sbPool.Get();
+        stack.Enqueue((target, initialSb, StartingPosition));
 
-        stack.Push((target, new StringBuilder(), StartingPosition));
-
-        while (stack.TryPop(out var current))
+        try
         {
-            var (currentTarget, prior, currentPosition) = current;
-
-            if (currentTarget == string.Empty)
+            while (stack.TryDequeue(out var current))
             {
-                results.Add(prior.ToString()); // Final conversion to string
-                continue;
-            }
+                var (currentTarget, prior, currentPosition) = current;
 
-            var currentChar = currentTarget[0];
-            var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
+                if (currentTarget == "")
+                {
+                    yield return prior.ToString();
+                    _sbPool.Return(prior); // Return to the pool
+                    continue;
+                }
 
-            foreach (var sequence in nextCharSequences)
-            {
-                // Clone the StringBuilder only when pushing to stack
-                var sb = new StringBuilder(prior.Length + sequence.Length + 1);
-                sb.Append(prior).Append(sequence).Append(Symbols.Push);
-                stack.Push((currentTarget[1..], sb, Keys[currentChar]));
+                var currentChar = currentTarget[0];
+                var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
+
+                foreach (var sequence in nextCharSequences)
+                {
+                    // Get a new StringBuilder from the pool
+                    var sb = _sbPool.Get();
+                    sb.Append(prior).Append(sequence).Append(Symbols.Push);
+
+                    stack.Enqueue((currentTarget[1..], sb, Keys[currentChar]));
+                }
+
+                _sbPool.Return(prior); // Return the builder back to the pool after use
             }
         }
-
-        return results;
+        finally
+        {
+            _sbPool.Return(initialSb); // Ensure cleanup even on exception
+        }
     }
 
 
