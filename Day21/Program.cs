@@ -63,53 +63,41 @@ abstract class Keypad
 
     internal IEnumerable<string> Sequences(string target) => UncachedSequences(target);
 
-    static readonly ObjectPool<StringBuilder> _sbPool =
-        new DefaultObjectPool<StringBuilder>(new StringBuilderPooledObjectPolicy());
-
     IEnumerable<string> UncachedSequences(string target)
     {
-        var stack = new Queue<(string Target, StringBuilder Prior, Position CurrentPosition)>();
+        var stack = new PriorityQueue<(string Target, StringBuilder Prior, Position CurrentPosition), int>();
 
         // Get the initial StringBuilder from the pool
-        var initialSb = _sbPool.Get();
-        stack.Enqueue((target, initialSb, StartingPosition));
+        stack.Enqueue((target, new StringBuilder(), StartingPosition), target.Length);
 
-        try
+        while (stack.TryDequeue(out var current, out _))
         {
-            while (stack.TryDequeue(out var current))
+            var (currentTarget, prior, currentPosition) = current;
+
+            if (currentTarget == "")
             {
-                var (currentTarget, prior, currentPosition) = current;
-
-                if (currentTarget == "")
-                {
-                    yield return prior.ToString();
-                    _sbPool.Return(prior); // Return to the pool
-                    continue;
-                }
-
-                var currentChar = currentTarget[0];
-                var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
-
-                foreach (var sequence in nextCharSequences)
-                {
-                    // Get a new StringBuilder from the pool
-                    var sb = _sbPool.Get();
-                    sb.Append(prior).Append(sequence).Append(Symbols.Push);
-
-                    stack.Enqueue((currentTarget[1..], sb, Keys[currentChar]));
-                }
-
-                _sbPool.Return(prior); // Return the builder back to the pool after use
+                yield return prior.ToString();
+                continue;
             }
-        }
-        finally
-        {
-            _sbPool.Return(initialSb); // Ensure cleanup even on exception
+
+            var currentChar = currentTarget[0];
+            var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
+
+            foreach (var sequence in nextCharSequences)
+            {
+                // Get a new StringBuilder from the pool
+                var sb = new StringBuilder();
+                sb.Append(prior).Append(sequence).Append(Symbols.Push);
+
+                var newTarget = currentTarget[1..];
+                stack.Enqueue((newTarget, sb, Keys[currentChar]), newTarget.Length);
+            }
         }
     }
 
 
-    readonly Dictionary<(Position, Position), string[]> _positionSequenceCache = new();
+    readonly Dictionary<(Position, Position), string[]> _positionSequenceCache =
+        new();
 
     string[] CachedSequencesTo(Position fromPosition, Position toPosition) =>
         _positionSequenceCache.TryGetValue((fromPosition, toPosition), out var cached)
