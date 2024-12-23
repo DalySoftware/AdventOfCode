@@ -43,8 +43,8 @@ var graph = Parse(input);
 
 var solver = new Solver(graph);
 
-Console.WriteLine("Result:");
-Console.WriteLine(solver.MatchingSetsOf(3).Count);
+Console.WriteLine("Password:");
+Console.WriteLine(solver.Password());
 
 return;
 
@@ -61,7 +61,7 @@ class Solver(Graph graph)
 {
     internal HashSet<HashSet<string>> MatchingSetsOf(int n)
     {
-        var rawSets = graph.SelectMany(x => SetsOf(n, x.Key)).ToArray();
+        var rawSets = graph.SelectMany(x => SetsOf(n, x.Key));
         var combined = rawSets.ToHashSet(Comparer);
         return combined.Where(set => set.Any(node => node.StartsWith('t'))).ToHashSet();
     }
@@ -90,9 +90,72 @@ class Solver(Graph graph)
         return results;
     }
 
+    internal string Password()
+    {
+        var longest = BiggestNetwork();
+        return string.Join(",", longest.Order());
+    }
+
+    HashSet<string> BiggestNetwork()
+    {
+        Console.WriteLine(nameof(BiggestNetwork) + " start");
+
+        var toVisit = new HashSet<HashSet<string>>(Comparer);
+        var visited = new HashSet<HashSet<string>>(Comparer);
+
+        foreach (var node in AllNodes) toVisit.Add([node]);
+
+        HashSet<string> biggest = [];
+
+        while (toVisit.Count > 0)
+        {
+            var network = toVisit.First();
+
+            if (!visited.Add(network))
+            {
+                toVisit.Remove(network);
+                continue;
+            }
+
+            if (visited.Count % 1_000_000 == 0) Console.WriteLine(visited.Count);
+
+            if (!IsInterconnected(network))
+            {
+                toVisit.Remove(network);
+                continue;
+            }
+
+            if (network.Count > biggest.Count)
+            {
+                biggest = network;
+                Console.WriteLine(biggest.Count);
+            }
+
+            var newNetworks = network
+                .SelectMany(ImmediateNeighbours)
+                .Select(neighbour => network.Append(neighbour).ToHashSet());
+
+            foreach (var newNet in newNetworks) toVisit.Add(newNet);
+            toVisit.Remove(network);
+        }
+
+        Console.WriteLine(nameof(BiggestNetwork) + " end ");
+        return biggest;
+    }
+
     bool IsInterconnected(HashSet<string> nodes) =>
         nodes.SelectMany(_ => nodes, (first, second) => (first, second)).All(x =>
-            x.first == x.second || graph[x.first].Contains(x.second) || graph[x.second].Contains(x.first));
+            x.first == x.second || HasEdge(x.first, x.second));
+
+    bool HasEdge(string node, string other) => graph[node].Contains(other) || graph[other].Contains(node);
+
+    IEnumerable<string> AllNodes => graph.Select(g => g.Key)
+        .Union(graph.SelectMany(g => g))
+        .Distinct();
+
+    IEnumerable<string> ImmediateNeighbours(string node) =>
+        graph[node].Union(
+            graph.Where(g => g.Contains(node)).Select(kv => kv.Key));
 
 
     static IEqualityComparer<HashSet<string>> Comparer => new HashSetComparer();
