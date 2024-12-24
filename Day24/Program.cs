@@ -1,5 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using Wires = System.Collections.Generic.Dictionary<string, bool>;
+
 // var input = """
 //             x00: 1
 //             x01: 0
@@ -50,12 +52,40 @@
 //             tnw OR pbm -> gnj
 //             """;
 
-var input = File.ReadAllText("input.txt");
+
+var input = """
+            x00: 0
+            x01: 1
+            x02: 0
+            x03: 1
+            x04: 0
+            x05: 1
+            y00: 0
+            y01: 0
+            y02: 1
+            y03: 1
+            y04: 0
+            y05: 1
+
+            x00 AND y00 -> z05
+            x01 AND y01 -> z02
+            x02 AND y02 -> z01
+            x03 AND y03 -> z03
+            x04 AND y04 -> z04
+            x05 AND y05 -> z00
+            """;
+
+// var input = File.ReadAllText("input.txt");
 
 var device = Parse(input);
 
+// Console.WriteLine("Result:");
+// Console.WriteLine(device.Calculate());
+
+var solver = new Solver(device);
+
 Console.WriteLine("Result:");
-Console.WriteLine(device.Calculate());
+Console.WriteLine(solver.Solve());
 
 return;
 
@@ -80,13 +110,48 @@ Device Parse(string input)
     return new Device(wires, gates);
 }
 
-class Device(Dictionary<string, bool> initialWires, Gate[] gates)
+class Solver(Device initialDevice)
 {
-    readonly Dictionary<string, bool> _wires = initialWires.ToDictionary(); // take a copy
+    IEnumerable<(Device Device, ((Gate, Gate), (Gate, Gate)) PairOfPairs)> PossibleDevices()
+    {
+        var pairsOfPairs = initialDevice.Gates.GetPairs();
+
+        foreach (var pairOfPairs in pairsOfPairs)
+        {
+            Gate[] swappedgates =
+                [pairOfPairs.PairA.Item1, pairOfPairs.PairA.Item2, pairOfPairs.PairB.Item1, pairOfPairs.PairB.Item2];
+            var unswappedGates = initialDevice.Gates.Where(g => swappedgates.Contains(g));
+            var newGates = unswappedGates
+                .Append(pairOfPairs.PairA.Item1 with { OutAddress = pairOfPairs.PairA.Item2.OutAddress })
+                .Append(pairOfPairs.PairA.Item2 with { OutAddress = pairOfPairs.PairA.Item1.OutAddress })
+                .Append(pairOfPairs.PairB.Item2 with { OutAddress = pairOfPairs.PairB.Item1.OutAddress })
+                .Append(pairOfPairs.PairB.Item2 with { OutAddress = pairOfPairs.PairB.Item1.OutAddress });
+            yield return (new Device(initialDevice.InitialWires, newGates.ToArray()), pairOfPairs);
+        }
+    }
+
+    internal string Solve()
+    {
+        var solution = PossibleDevices().First(d => d.Device.HasValidSum());
+        Gate[] swapped =
+        [
+            solution.PairOfPairs.Item1.Item1,
+            solution.PairOfPairs.Item1.Item2,
+            solution.PairOfPairs.Item2.Item1,
+            solution.PairOfPairs.Item2.Item2,
+        ];
+
+        return string.Join(",", swapped.Select(g => g.OutAddress).Order());
+    }
+}
+
+record Device(Wires InitialWires, Gate[] Gates)
+{
+    readonly Wires _wires = InitialWires.ToDictionary(); // take a copy
 
     internal long Calculate()
     {
-        var toCalculate = new Queue<Gate>(gates);
+        var toCalculate = new Queue<Gate>(Gates);
 
         while (toCalculate.TryDequeue(out var gate))
         {
@@ -106,6 +171,12 @@ class Device(Dictionary<string, bool> initialWires, Gate[] gates)
             .ToLong();
     }
 
+    internal bool HasValidSum()
+    {
+        var groups = _wires.ToLookup(kv => kv.Key[0], kv => kv.Value);
+        return groups['x'].ToLong() + groups['y'].ToLong() == groups['z'].ToLong();
+    }
+
     bool TryGetOutput(Gate gate, out bool? output)
     {
         if (!_wires.TryGetValue(gate.AddressA, out var operandA) ||
@@ -119,7 +190,7 @@ class Device(Dictionary<string, bool> initialWires, Gate[] gates)
         return true;
     }
 
-    bool Output(Operations operation, bool operandA, bool operandB) => operation switch
+    static bool Output(Operations operation, bool operandA, bool operandB) => operation switch
     {
         Operations.And => operandA && operandB,
         Operations.Or => operandA || operandB,
@@ -143,6 +214,21 @@ static class Extensions
         "XOR" => Operations.Xor,
         _ => throw new ArgumentOutOfRangeException(nameof(operationString), operationString, null),
     };
+
+    public static List<((T, T) PairA, (T, T) PairB)> GetPairs<T>(this IReadOnlyCollection<T> items)
+    {
+        return items
+            .SelectMany((_, index) =>
+                    items.Skip(index + 1),
+                (item1, item2) => (item1, item2))
+            .SelectMany(pair1 =>
+                items.Except([pair1.Item1, pair1.Item2])
+                    .SelectMany((item, index) =>
+                            items.Skip(index + 1)
+                                .Except([pair1.Item1, pair1.Item2]),
+                        (item3, item4) => (pair1, (item3, item4))))
+            .ToList();
+    }
 }
 
 record Gate(string AddressA, string AddressB, Operations Operation, string OutAddress);
