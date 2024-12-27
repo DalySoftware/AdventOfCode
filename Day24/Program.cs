@@ -145,11 +145,34 @@ class Solver(Device initialDevice)
     }
 }
 
-record Device(Wires InitialWires, Gate[] Gates)
+record Device
 {
-    readonly Wires _wires = InitialWires.ToDictionary(); // take a copy
+    readonly Wires _wires; // take a copy
 
     bool _calculated;
+    readonly bool[] _expectedZValues;
+
+    public Device(Wires InitialWires, Gate[] Gates)
+    {
+        this.InitialWires = InitialWires;
+        this.Gates = Gates;
+        _wires = InitialWires.ToDictionary();
+
+
+        var groups = _wires
+            .GroupBy(kv => kv.Key[0])
+            .ToDictionary(g => g.Key,
+                g => g.OrderBy(item => item.Key).Select(item => item.Value).ToList());
+
+        var x = groups['x'].ToLong();
+        var y = groups['y'].ToLong();
+
+        _expectedZValues = (x + y).ToBools();
+    }
+
+    public Wires InitialWires { get; init; }
+    public Gate[] Gates { get; init; }
+
 
     internal long Calculate()
     {
@@ -165,6 +188,12 @@ record Device(Wires InitialWires, Gate[] Gates)
                 toCalculate.Enqueue(gate);
                 continue;
             }
+
+            if (
+                gate.OutAddress.StartsWith('z')
+                && int.Parse(gate.OutAddress[1..]) is var index
+                && output != _expectedZValues[index])
+                return -1L;
 
             _wires[gate.OutAddress] = (bool)output!;
         }
@@ -220,6 +249,10 @@ static class Extensions
             .Select((b, i) => b ? 1L << i : 0L)
             .Aggregate(0L, (acc, val) => acc | val);
 
+    internal static bool[] ToBools(this long num) =>
+        Enumerable.Range(0, 64)
+            .Select(i => (num & (1L << i)) != 0)
+            .ToArray();
 
     internal static Operations ParseOperation(this string operationString) => operationString switch
     {
@@ -229,53 +262,49 @@ static class Extensions
         _ => throw new ArgumentOutOfRangeException(nameof(operationString), operationString, null),
     };
 
-    internal static List<List<(T, T)>> GetPairs<T>(this IReadOnlyCollection<T> items, int numberOfPairs)
+    internal static IEnumerable<List<(T, T)>> GetPairs<T>(this IReadOnlyCollection<T> items, int numberOfPairs)
         where T : notnull
     {
-        var itemList = items.ToList();
-        var count = itemList.Count;
+        var itemList = items.ToArray();
+        var count = itemList.Length;
 
-        return numberOfPairs * 2 > count
-            ? []
-            : // Not enough items to form the requested number of pairs
-            FindPairs([], []);
+        if (numberOfPairs * 2 > count) yield break; // Not enough items to form the requested number of pairs
 
-        List<List<(T, T)>> FindPairs(List<(T, T)> currentPairs, HashSet<int> usedIndices)
+        var usedIndices = new bool[count];
+        var currentPairs = new Stack<(T, T)>(numberOfPairs);
+
+        foreach (var pairSet in FindPairs(0)) yield return [..pairSet];
+        yield break;
+
+        IEnumerable<Stack<(T, T)>> FindPairs(int startIndex)
         {
-            var results = new List<List<(T, T)>>();
-
             if (currentPairs.Count == numberOfPairs)
-            {
-                results.Add([..currentPairs]);
-                return results;
-            }
-
-            for (var i = 0; i < count - 1; i++)
-            {
-                if (usedIndices.Contains(i)) continue;
-
-                for (var j = i + 1; j < count; j++)
+                yield return new Stack<(T, T)>(currentPairs.Reverse());
+            else
+                for (var i = startIndex; i < count - 1; i++)
                 {
-                    if (usedIndices.Contains(j)) continue;
+                    if (usedIndices[i]) continue;
 
-                    currentPairs.Add((itemList[i], itemList[j]));
-                    usedIndices.Add(i);
-                    usedIndices.Add(j);
+                    for (var j = i + 1; j < count; j++)
+                    {
+                        if (usedIndices[j]) continue;
 
-                    results.AddRange(FindPairs(currentPairs, usedIndices));
+                        usedIndices[i] = true;
+                        usedIndices[j] = true;
+                        currentPairs.Push((itemList[i], itemList[j]));
 
-                    currentPairs.RemoveAt(currentPairs.Count - 1);
-                    usedIndices.Remove(i);
-                    usedIndices.Remove(j);
+                        foreach (var pairs in FindPairs(i + 1)) yield return pairs;
+
+                        currentPairs.Pop();
+                        usedIndices[i] = false;
+                        usedIndices[j] = false;
+                    }
                 }
-            }
-
-            return results;
         }
     }
 }
 
-record Gate(string AddressA, string AddressB, Operations Operation, string OutAddress);
+record struct Gate(string AddressA, string AddressB, Operations Operation, string OutAddress);
 
 enum Operations
 {
