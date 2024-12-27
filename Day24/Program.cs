@@ -53,29 +53,29 @@ using Wires = System.Collections.Generic.Dictionary<string, bool>;
 //             """;
 
 
-var input = """
-            x00: 0
-            x01: 1
-            x02: 0
-            x03: 1
-            x04: 0
-            x05: 1
-            y00: 0
-            y01: 0
-            y02: 1
-            y03: 1
-            y04: 0
-            y05: 1
+// var input = """
+//             x00: 0
+//             x01: 1
+//             x02: 0
+//             x03: 1
+//             x04: 0
+//             x05: 1
+//             y00: 0
+//             y01: 0
+//             y02: 1
+//             y03: 1
+//             y04: 0
+//             y05: 1
+//
+//             x00 AND y00 -> z05
+//             x01 AND y01 -> z02
+//             x02 AND y02 -> z01
+//             x03 AND y03 -> z03
+//             x04 AND y04 -> z04
+//             x05 AND y05 -> z00
+//             """;
 
-            x00 AND y00 -> z05
-            x01 AND y01 -> z02
-            x02 AND y02 -> z01
-            x03 AND y03 -> z03
-            x04 AND y04 -> z04
-            x05 AND y05 -> z00
-            """;
-
-// var input = File.ReadAllText("input.txt");
+var input = File.ReadAllText("input.txt");
 
 var device = Parse(input);
 
@@ -112,36 +112,36 @@ Device Parse(string input)
 
 class Solver(Device initialDevice)
 {
-    IEnumerable<(Device Device, ((Gate, Gate), (Gate, Gate)) PairOfPairs)> PossibleDevices()
+    IEnumerable<(Device Device, Gate[] SwappedGates)> PossibleDevices()
     {
-        var pairsOfPairs = initialDevice.Gates.GetPairs();
+        var setsOfPairs = initialDevice.Gates.GetPairs(4);
 
-        foreach (var pairOfPairs in pairsOfPairs)
+        foreach (var set in setsOfPairs)
         {
-            Gate[] swappedgates =
-                [pairOfPairs.PairA.Item1, pairOfPairs.PairA.Item2, pairOfPairs.PairB.Item1, pairOfPairs.PairB.Item2];
-            var unswappedGates = initialDevice.Gates.Where(g => swappedgates.Contains(g));
-            var newGates = unswappedGates
-                .Append(pairOfPairs.PairA.Item1 with { OutAddress = pairOfPairs.PairA.Item2.OutAddress })
-                .Append(pairOfPairs.PairA.Item2 with { OutAddress = pairOfPairs.PairA.Item1.OutAddress })
-                .Append(pairOfPairs.PairB.Item2 with { OutAddress = pairOfPairs.PairB.Item1.OutAddress })
-                .Append(pairOfPairs.PairB.Item2 with { OutAddress = pairOfPairs.PairB.Item1.OutAddress });
-            yield return (new Device(initialDevice.InitialWires, newGates.ToArray()), pairOfPairs);
+            var swappedGates = set.SelectMany(pair => new[] { pair.Item1, pair.Item2 }).ToArray();
+            var unswappedGates = initialDevice.Gates.Where(g => !swappedGates.Contains(g)).ToList();
+
+            var newGates = new List<Gate>(unswappedGates);
+
+            foreach (var swappedPair in set.Select(pair => SwapOut(pair.Item1, pair.Item2)))
+            {
+                newGates.Add(swappedPair.Item1);
+                newGates.Add(swappedPair.Item2);
+            }
+
+            yield return (new Device(initialDevice.InitialWires, newGates.ToArray()), swappedGates);
         }
     }
+
+    static (Gate, Gate) SwapOut(Gate gate1, Gate gate2) => (gate1 with { OutAddress = gate2.OutAddress },
+        gate2 with { OutAddress = gate1.OutAddress });
+
 
     internal string Solve()
     {
         var solution = PossibleDevices().First(d => d.Device.HasValidSum());
-        Gate[] swapped =
-        [
-            solution.PairOfPairs.Item1.Item1,
-            solution.PairOfPairs.Item1.Item2,
-            solution.PairOfPairs.Item2.Item1,
-            solution.PairOfPairs.Item2.Item2,
-        ];
 
-        return string.Join(",", swapped.Select(g => g.OutAddress).Order());
+        return string.Join(",", solution.SwappedGates.Select(g => g.OutAddress).Order());
     }
 }
 
@@ -149,8 +149,13 @@ record Device(Wires InitialWires, Gate[] Gates)
 {
     readonly Wires _wires = InitialWires.ToDictionary(); // take a copy
 
+    bool _calculated;
+
     internal long Calculate()
     {
+        if (_calculated) throw new InvalidOperationException();
+        _calculated = true;
+
         var toCalculate = new Queue<Gate>(Gates);
 
         while (toCalculate.TryDequeue(out var gate))
@@ -173,8 +178,17 @@ record Device(Wires InitialWires, Gate[] Gates)
 
     internal bool HasValidSum()
     {
-        var groups = _wires.ToLookup(kv => kv.Key[0], kv => kv.Value);
-        return groups['x'].ToLong() + groups['y'].ToLong() == groups['z'].ToLong();
+        if (!_calculated) Calculate();
+
+        var groups = _wires
+            .GroupBy(kv => kv.Key[0])
+            .ToDictionary(g => g.Key,
+                g => g.OrderBy(item => item.Key).Select(item => item.Value).ToList());
+
+        var x = groups['x'].ToLong();
+        var y = groups['y'].ToLong();
+        var z = groups['z'].ToLong();
+        return x + y == z;
     }
 
     bool TryGetOutput(Gate gate, out bool? output)
@@ -215,19 +229,49 @@ static class Extensions
         _ => throw new ArgumentOutOfRangeException(nameof(operationString), operationString, null),
     };
 
-    public static List<((T, T) PairA, (T, T) PairB)> GetPairs<T>(this IReadOnlyCollection<T> items)
+    internal static List<List<(T, T)>> GetPairs<T>(this IReadOnlyCollection<T> items, int numberOfPairs)
+        where T : notnull
     {
-        return items
-            .SelectMany((_, index) =>
-                    items.Skip(index + 1),
-                (item1, item2) => (item1, item2))
-            .SelectMany(pair1 =>
-                items.Except([pair1.Item1, pair1.Item2])
-                    .SelectMany((item, index) =>
-                            items.Skip(index + 1)
-                                .Except([pair1.Item1, pair1.Item2]),
-                        (item3, item4) => (pair1, (item3, item4))))
-            .ToList();
+        var itemList = items.ToList();
+        var count = itemList.Count;
+
+        return numberOfPairs * 2 > count
+            ? []
+            : // Not enough items to form the requested number of pairs
+            FindPairs([], []);
+
+        List<List<(T, T)>> FindPairs(List<(T, T)> currentPairs, HashSet<int> usedIndices)
+        {
+            var results = new List<List<(T, T)>>();
+
+            if (currentPairs.Count == numberOfPairs)
+            {
+                results.Add([..currentPairs]);
+                return results;
+            }
+
+            for (var i = 0; i < count - 1; i++)
+            {
+                if (usedIndices.Contains(i)) continue;
+
+                for (var j = i + 1; j < count; j++)
+                {
+                    if (usedIndices.Contains(j)) continue;
+
+                    currentPairs.Add((itemList[i], itemList[j]));
+                    usedIndices.Add(i);
+                    usedIndices.Add(j);
+
+                    results.AddRange(FindPairs(currentPairs, usedIndices));
+
+                    currentPairs.RemoveAt(currentPairs.Count - 1);
+                    usedIndices.Remove(i);
+                    usedIndices.Remove(j);
+                }
+            }
+
+            return results;
+        }
     }
 }
 
