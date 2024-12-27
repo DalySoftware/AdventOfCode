@@ -65,36 +65,47 @@ abstract class Keypad
 
     IEnumerable<string> UncachedSequences(string target)
     {
-        var stack = new PriorityQueue<(string Target, StringBuilder Prior, Position CurrentPosition), int>();
+        // Pool for reusing List<char>
+        var pool = new DefaultObjectPool<List<char>>(new DefaultPooledObjectPolicy<List<char>>());
 
-        // Get the initial StringBuilder from the pool
-        stack.Enqueue((target, new StringBuilder(), StartingPosition), target.Length);
+        // Priority queue stores: TargetIndex, Prior, Position
+        var stack = new PriorityQueue<(int TargetIndex, List<char> Prior, Position CurrentPosition), int>();
+
+        // Initialize with pooled List<char>
+        var initialList = pool.Get();
+        initialList.Clear(); // Ensure it's empty
+
+        stack.Enqueue((0, initialList, StartingPosition), target.Length);
 
         while (stack.TryDequeue(out var current, out _))
         {
-            var (currentTarget, prior, currentPosition) = current;
+            var (targetIndex, prior, currentPosition) = current;
 
-            if (currentTarget == "")
+            // Check if target is complete
+            if (targetIndex == target.Length)
             {
-                yield return prior.ToString();
+                yield return new string(prior.ToArray());
+                pool.Return(prior); // Return to pool for reuse
                 continue;
             }
 
-            var currentChar = currentTarget[0];
+            var currentChar = target[targetIndex];
             var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
 
             foreach (var sequence in nextCharSequences)
             {
-                // Get a new StringBuilder from the pool
-                var sb = new StringBuilder();
-                sb.Append(prior).Append(sequence).Append(Symbols.Push);
+                // Get or reuse a List<char> from the pool
+                var newList = pool.Get();
+                newList.AddRange(prior);
+                newList.AddRange(sequence);
+                newList.Add(Symbols.Push);
 
-                var newTarget = currentTarget[1..];
-                stack.Enqueue((newTarget, sb, Keys[currentChar]), newTarget.Length);
+                stack.Enqueue((targetIndex + 1, newList, Keys[currentChar]), target.Length - targetIndex - 1);
             }
+
+            pool.Return(prior); // Return the used list to the pool
         }
     }
-
 
     protected abstract Dictionary<(Position, Position), string[]> PositionSequenceCache { get; }
 
