@@ -96,13 +96,12 @@ abstract class Keypad
     }
 
 
-    readonly Dictionary<(Position, Position), string[]> _positionSequenceCache =
-        new();
+    protected abstract Dictionary<(Position, Position), string[]> PositionSequenceCache { get; }
 
     string[] CachedSequencesTo(Position fromPosition, Position toPosition) =>
-        _positionSequenceCache.TryGetValue((fromPosition, toPosition), out var cached)
+        PositionSequenceCache.TryGetValue((fromPosition, toPosition), out var cached)
             ? cached
-            : _positionSequenceCache[(fromPosition, toPosition)] = SequencesTo(fromPosition, toPosition).ToArray();
+            : PositionSequenceCache[(fromPosition, toPosition)] = SequencesTo(fromPosition, toPosition).ToArray();
 
     IEnumerable<string> SequencesTo(Position fromPosition, Position toPosition)
     {
@@ -198,6 +197,9 @@ class NumericKeypad : Keypad
         ['0'] = new(1, 3),
         ['A'] = new(2, 3),
     };
+
+    static readonly Dictionary<(Position, Position), string[]> StaticCache = new();
+    protected override Dictionary<(Position, Position), string[]> PositionSequenceCache => StaticCache;
 }
 
 class DirectionalKeypad : Keypad
@@ -210,6 +212,9 @@ class DirectionalKeypad : Keypad
         ['v'] = new(1, 1),
         ['>'] = new(2, 1),
     };
+
+    static readonly Dictionary<(Position, Position), string[]> StaticCache = new();
+    protected override Dictionary<(Position, Position), string[]> PositionSequenceCache => StaticCache;
 }
 
 static class Symbols
