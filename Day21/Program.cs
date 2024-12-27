@@ -65,45 +65,28 @@ abstract class Keypad
 
     IEnumerable<string> UncachedSequences(string target)
     {
-        // Pool for reusing List<char>
-        var pool = new DefaultObjectPool<List<char>>(new DefaultPooledObjectPolicy<List<char>>());
+        var stack = new Stack<(int Index, IEnumerable<char> Prior, Position Pos)>();
 
-        // Priority queue stores: TargetIndex, Prior, Position
-        var stack = new PriorityQueue<(int TargetIndex, List<char> Prior, Position CurrentPosition), int>();
+        stack.Push((0, Enumerable.Empty<char>(), StartingPosition));
 
-        // Initialize with pooled List<char>
-        var initialList = pool.Get();
-        initialList.Clear(); // Ensure it's empty
-
-        stack.Enqueue((0, initialList, StartingPosition), target.Length);
-
-        while (stack.TryDequeue(out var current, out _))
+        while (stack.Count > 0)
         {
-            var (targetIndex, prior, currentPosition) = current;
+            var (index, prior, position) = stack.Pop();
 
-            // Check if target is complete
-            if (targetIndex == target.Length)
+            if (index == target.Length)
             {
-                yield return new string(prior.ToArray());
-                pool.Return(prior); // Return to pool for reuse
+                yield return new string(prior.ToArray()); // Build only at the end
                 continue;
             }
 
-            var currentChar = target[targetIndex];
-            var nextCharSequences = CachedSequencesTo(currentPosition, Keys[currentChar]);
+            var currentChar = target[index];
+            var nextSequences = CachedSequencesTo(position, Keys[currentChar]);
 
-            foreach (var sequence in nextCharSequences)
+            foreach (var seq in nextSequences)
             {
-                // Get or reuse a List<char> from the pool
-                var newList = pool.Get();
-                newList.AddRange(prior);
-                newList.AddRange(sequence);
-                newList.Add(Symbols.Push);
-
-                stack.Enqueue((targetIndex + 1, newList, Keys[currentChar]), target.Length - targetIndex - 1);
+                var combined = prior.Concat(seq).Append(Symbols.Push); // Streamed concat
+                stack.Push((index + 1, combined, Keys[currentChar]));
             }
-
-            pool.Return(prior); // Return the used list to the pool
         }
     }
 
